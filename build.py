@@ -3,17 +3,20 @@
 # Copyright (C) 2026 Grzegorz Olędzki
 """Render a one-page table of "which depot runs which brigade" for every WTP bus line.
 
-Reads the daily-rebuilt mkuran Warsaw GTFS (https://mkuran.pl/gtfs/warsaw.zip) and, for
-the furthest-future schedule day the feed carries, works out the operating depot of each
-(line, brigade) pair. The depot is not a field in GTFS — it is recovered from the
-non-revenue pull-out/pull-in trips (`exceptional=1`, variants TD-*/TZ-*), which start or
-end at depot stops like "R-1 Zajezdnia Woronicza", and then propagated along `block_id`
-so a brigade without its own depot run inherits it from the rest of the vehicle's day.
+Reads the daily-rebuilt zbiorkom.live Warsaw GTFS
+(https://cdn.zbiorkom.live/gtfs/warsaw.zip) and, for the furthest-future date of each
+day type the feed carries, reports the operating depot of every (line, brigade) pair.
 
-Only MZA models those runs, so brigades of the contracted operators (Mobilis, PKS
-Grodzisk, ReloBus) come out as "nieznany" — see README.md.
+The depot comes straight from `depot_id`, a non-standard column zbiorkom adds to
+trips.txt. It names MZA's depots by an internal code — R-7(W) is Woronicza, R11(K)
+Kleszczowa — and the contracted operators (Mobilis, PKS Grodzisk, ReloBus, KMŁ) outright,
+so it covers the whole network, not just the part that models pull-out/pull-in runs.
 
-Stdlib only. One streaming pass over stop_times.txt, so it fits in CI memory.
+Day types are not in the feed either — the service ids are opaque numbers — so they are
+derived from the weekday. Public holidays are not yet handled: WTP runs its Sunday
+timetable on them, but they read as ordinary weekdays here.
+
+Stdlib only; reads trips.txt, routes.txt and calendar_dates.txt, never stop_times.txt.
 """
 
 import argparse
@@ -28,24 +31,38 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-FEED_URL = "https://mkuran.pl/gtfs/warsaw.zip"
+FEED_URL = "https://cdn.zbiorkom.live/gtfs/warsaw.zip"
+# The CDN sits behind Cloudflare, which 403s the default "Python-urllib/x.y" agent.
+USER_AGENT = "przydzial-brygad (+https://github.com/mccartney/przydzial-brygad)"
 FEED_FILE = Path("warsaw.zip")
 DATA = Path("brygady.json")
 OUT = Path("przydzial.html")
 
 BUS_ROUTE_TYPE = "3"
-# Suburban "L" lines are run by commune operators the feed says nothing about.
+# Suburban "L" lines are left out of the table. This feed does name their commune
+# operators (depot_id G-14, G-17, G-30, G-42), so they could be added.
 SUBURBAN_LINE = re.compile(r"^L-?\d+$")
-# Surface-network services are dated, e.g. "2026-09-08:PcS"; metro ones ("PcM") are not.
-DATED_SERVICE = re.compile(r"^(\d{4}-\d{2}-\d{2}):(PcS|PtS|SbS|NdS)$")
-MZA_DEPOT = re.compile(r"^(R-\d+) Zajezdnia (.+)$")
-# The one depot-like terminal that does not follow the "R-n Zajezdnia X" naming.
-EXTRA_DEPOTS = {"Wydział Włościańska": "Włościańska"}
-# Włościańska is an outstation, not a home depot: a bus pulls out of R-4 (or R-6) in the
-# morning and parks there overnight, or the reverse. It never turns up as a brigade's only
-# depot, so it says where the bus sleeps, not who runs it — hide it whenever a real
-# depot is also on the block.
-OUTSTATIONS = {"Włościańska"}
+# zbiorkom's depot_id -> (label used in the table, full name for the legend). MZA's codes
+# are internal — the parenthesised letter is the site's initial — so they are relabelled
+# to the R-n numbering ZTM and MZA use in public. Verified against the depot stops the
+# trips of each code actually terminate at.
+#
+# The contracted operators get a code per depot (Mob12/Mob88, Relobus29/Relobus38); those
+# collapse to one label each, since the table answers who runs a brigade, not from which
+# of an operator's yards. Several lines mix both of an operator's depots.
+DEPOTS = {
+    "R-7(W)": ("R-1", "R-1 Woronicza"),
+    "R11(K)": ("R-2", "R-2 Kleszczowa"),
+    "R10(O)": ("R-3", "R-3 Ostrobramska"),
+    "R13(S)": ("R-4", "R-4 Stalowa"),
+    "R14(P)": ("R-6", "R-6 Płochocińska"),
+    "Mob12": ("Mobilis", "Mobilis"),
+    "Mob88": ("Mobilis", "Mobilis"),
+    "PKS_A82": ("PKS Grodzisk", "PKS Grodzisk Mazowiecki"),
+    "Relobus29": ("Relobus", "Relobus"),
+    "Relobus38": ("Relobus", "Relobus"),
+    "KMŁ K-26": ("KMŁ", "Komunikacja Miejska Łomianki"),
+}
 
 # The two columns of the table, each merging the ZTM day-types it covers.
 DAY_GROUPS = [
@@ -55,7 +72,8 @@ DAY_GROUPS = [
 DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "niedziela"}
 
 UNKNOWN = "nieznany"
-DEPOT_ORDER = ["R-1", "R-2", "R-3", "R-4", "R-5", "R-6", "Włościańska", UNKNOWN]
+DEPOT_ORDER = ["R-1", "R-2", "R-3", "R-4", "R-5", "R-6",
+               "Mobilis", "PKS Grodzisk", "Relobus", "KMŁ", UNKNOWN]
 DEPOT_COLOR = {
     "R-1": "#cfe0ff",
     "R-2": "#cdeed6",
@@ -63,14 +81,19 @@ DEPOT_COLOR = {
     "R-4": "#f8d1e4",
     "R-5": "#c9ece9",
     "R-6": "#ddd2f4",
-    "Włościańska": "#fdefac",
+    "Mobilis": "#ffe3b0",
+    "PKS Grodzisk": "#dcccc4",
+    "Relobus": "#d2e8ae",
+    "KMŁ": "#f2c9e2",
     UNKNOWN: "#e6e6e6",
 }
 DEPOT_FULL = {}  # short label -> "R-1 Woronicza", filled while parsing
 
-# Guards against publishing a page built from a truncated or malformed feed.
+# Guards against publishing a page built from a truncated or malformed feed. depot_id
+# covers all but a handful of trips, so anything near the old heuristic's ~88% means the
+# column has changed shape or the DEPOTS codes have been renamed underneath us.
 MIN_LINES = 200
-MIN_COVERAGE = 0.60
+MIN_COVERAGE = 0.90
 
 
 class Feed:
@@ -86,11 +109,6 @@ class Feed:
         with self._open(table) as fh:
             yield from csv.DictReader(fh)
 
-    def lines(self, table):
-        """Raw text lines — lets us prefilter the huge tables before paying for CSV parsing."""
-        with self._open(table) as fh:
-            yield from fh
-
     def version(self):
         for row in self.rows("feed_info"):
             return row["feed_version"]
@@ -102,114 +120,84 @@ def download(path):
         print(f"using existing {path}", file=sys.stderr)
         return
     print(f"downloading {FEED_URL}", file=sys.stderr)
-    with urllib.request.urlopen(FEED_URL, timeout=300) as resp, open(path, "wb") as fh:
+    req = urllib.request.Request(FEED_URL, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=300) as resp, open(path, "wb") as fh:
         while chunk := resp.read(1 << 20):
             fh.write(chunk)
     print(f"  {path.stat().st_size / 1e6:.0f} MB", file=sys.stderr)
 
 
-def pick_services(feed):
-    """Latest dated service per day-type — the furthest-future edition the feed carries.
+def day_code(date):
+    """ZTM day type of a calendar date.
 
-    `calendar_dates.txt` repeats each service weekly to the end of the month, so the
-    highest date *prefix* (not the highest date it runs on) is the newest schedule.
+    The feed does not carry it — service ids are opaque numbers — so it comes from the
+    weekday alone. A public holiday runs the Sunday timetable but still looks like a
+    weekday here, so one falling inside the feed window lands in the wrong column.
     """
-    latest = {}
-    for row in feed.rows("calendar_dates"):
-        m = DATED_SERVICE.match(row["service_id"])
-        if not m:
-            continue
-        date, code = m.groups()
-        if code not in latest or date > latest[code][0]:
-            latest[code] = (date, row["service_id"])
-    return latest
+    return {4: "PtS", 5: "SbS", 6: "NdS"}.get(date.weekday(), "PcS")
 
 
-def depot_label(stop_name):
-    """'R-1 Zajezdnia Woronicza' -> 'R-1'; remembers the full name for the legend."""
-    m = MZA_DEPOT.match(stop_name)
-    if m:
-        short, place = m.groups()
-        DEPOT_FULL.setdefault(short, f"{short} {place}")
-        return short
-    short = EXTRA_DEPOTS.get(stop_name)
-    if short:
-        DEPOT_FULL.setdefault(short, stop_name)
-    return short
+def pick_days(feed):
+    """Furthest-future date the feed carries for each day type.
+
+    The feed spans about nine days, and a timetable change lands on the later ones first,
+    so the last date of each type is the newest edition of that day's schedule.
+    """
+    days = {}
+    for raw in sorted({r["date"] for r in feed.rows("calendar_dates")}):
+        date = datetime.date(int(raw[:4]), int(raw[4:6]), int(raw[6:8]))
+        days[day_code(date)] = date
+    return days
+
+
+def read_services(feed, days):
+    """service_id -> the day-type codes it runs under, for the picked dates only.
+
+    A service id is opaque here and nothing stops one from running on two of the picked
+    dates, so a service maps to a set of codes rather than a single one.
+    """
+    wanted = {f"{date:%Y%m%d}": code for code, date in days.items()}
+    services = {}
+    for r in feed.rows("calendar_dates"):
+        code = wanted.get(r["date"])
+        if code:
+            services.setdefault(r["service_id"], set()).add(code)
+    return services
 
 
 def read_trips(feed, services):
-    """One pass over trips.txt. Returns what every later step needs, keyed by day-type code.
+    """One pass over trips.txt: (day-type, line, brigade) -> set of depot labels.
 
-    services maps service_id -> day-type code.
+    Returns that alongside a count of depot_id values missing from DEPOTS, so a renamed
+    or newly added operator shows up in the log instead of quietly becoming "nieznany".
     """
     bus_lines = {}
     for r in feed.rows("routes"):
         if r["route_type"] == BUS_ROUTE_TYPE and not SUBURBAN_LINE.match(r["route_short_name"]):
             bus_lines[r["route_id"]] = r["route_short_name"]
 
-    pairs = {}          # (code, line, brigade) -> set of block_ids
-    block_depots = {}   # block_id -> set of depot labels
-    tech = {}           # trip_id of a non-revenue trip -> block_id
+    pair_depots = {}
+    unmapped = {}
     for t in feed.rows("trips"):
-        code = services.get(t["service_id"])
+        codes = services.get(t["service_id"])
         line = bus_lines.get(t["route_id"])
-        if code is None or line is None:
+        # brigade and depot_id are zbiorkom extensions, not GTFS: read them defensively so
+        # that a feed dropping either fails the coverage guard instead of the parse.
+        brigade = t.get("brigade")
+        if not codes or line is None or not brigade:
             continue
-        block = t["block_id"]
-        pairs.setdefault((code, line, t["block_short_name"]), set()).add(block)
-        if t["exceptional"] == "1":
-            tech[t["trip_id"]] = block
-            # A pull-in's headsign is already the depot; a pull-out's is not, so we still
-            # need the stop_times pass below to catch where it started from.
-            label = depot_label(t["trip_headsign"])
+        depot = t.get("depot_id")
+        label = None
+        if depot in DEPOTS:
+            label, full = DEPOTS[depot]
+            DEPOT_FULL.setdefault(label, full)
+        elif depot:
+            unmapped[depot] = unmapped.get(depot, 0) + 1
+        for code in codes:
+            slot = pair_depots.setdefault((code, line, brigade), set())
             if label:
-                block_depots.setdefault(block, set()).add(label)
-    return pairs, block_depots, tech
-
-
-def read_technical_terminals(feed, tech, dates):
-    """First and last stop of every non-revenue trip, from a single stop_times pass."""
-    prefixes = tuple(f"{d}:" for d in dates)
-    header = None
-    ends = {}  # trip_id -> {"first": (seq, stop_id), "last": (seq, stop_id)}
-    for raw in feed.lines("stop_times"):
-        if header is None:
-            header = next(csv.reader([raw]))
-            i_trip, i_seq, i_stop = (header.index(c) for c in ("trip_id", "stop_sequence", "stop_id"))
-            continue
-        if not raw.startswith(prefixes):
-            continue
-        row = next(csv.reader([raw]))
-        trip = row[i_trip]
-        if trip not in tech:
-            continue
-        seq, stop = int(row[i_seq]), row[i_stop]
-        e = ends.setdefault(trip, {"first": (seq, stop), "last": (seq, stop)})
-        if seq < e["first"][0]:
-            e["first"] = (seq, stop)
-        if seq > e["last"][0]:
-            e["last"] = (seq, stop)
-    return ends
-
-
-def resolve_depots(feed, pairs, block_depots, tech, ends):
-    """Fold the technical-trip terminals into block_depots, then read depots off the blocks."""
-    wanted = {stop for e in ends.values() for _seq, stop in (e["first"], e["last"])}
-    names = {}
-    for s in feed.rows("stops"):
-        if s["stop_id"] in wanted:
-            names[s["stop_id"]] = s["stop_name"]
-
-    for trip, e in ends.items():
-        for _seq, stop in (e["first"], e["last"]):
-            label = depot_label(names.get(stop, ""))
-            if label:
-                block_depots.setdefault(tech[trip], set()).add(label)
-
-    # A brigade inherits every depot seen anywhere in its vehicle's whole-day chain.
-    return {key: set().union(*(block_depots.get(b, set()) for b in blocks)) if blocks else set()
-            for key, blocks in pairs.items()}
+                slot.add(label)
+    return pair_depots, unmapped
 
 
 def group_rows(pair_depots, services_by_code):
@@ -237,8 +225,7 @@ def group_rows(pair_depots, services_by_code):
     for line, groups in table.items():
         for group_key, brigades in groups.items():
             for brigade, entry in brigades.items():
-                depots = entry["depots"] - OUTSTATIONS or entry["depots"]
-                label = " / ".join(sorted(depots, key=depot_sort)) or UNKNOWN
+                label = " / ".join(sorted(entry["depots"], key=depot_sort)) or UNKNOWN
                 out.setdefault(line, {}).setdefault(group_key, {}).setdefault(label, []).append(
                     (brigade, entry["only"])
                 )
@@ -246,7 +233,9 @@ def group_rows(pair_depots, services_by_code):
         for depots in groups.values():
             for brigades in depots.values():
                 brigades.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
-    return out
+    # Sorted so the committed brygady.json diffs line by line between rebuilds; the feed
+    # lists trips in no particular order.
+    return {line: out[line] for line in sorted(out, key=line_sort)}
 
 
 def depot_sort(label):
@@ -404,7 +393,7 @@ def build_html(payload):
   <h1>Przydział brygad — zakłady i przewoźnicy WTP</h1>
   <div class="sub">{len(lines)} linii autobusowych · rozkład: {html.escape(day_note)} —
     najdalej wysunięta w przyszłość edycja w feedzie · bez linii L</div>
-  <div class="sub">źródło: <a href="https://mkuran.pl/gtfs/">WarsawGTFS</a> ·
+  <div class="sub">źródło: <a href="https://zbiorkom.live">zbiorkom.live</a> ·
     feed {html.escape(payload["feedVersion"] or "?")} · zaktualizowano {payload["generated"]}</div>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="scroll"><table>
@@ -413,14 +402,12 @@ def build_html(payload):
   </table></div>
   <div class="legend">{''.join(legend)}</div>
   <div class="foot">
-    Zakład wyznaczony z kursów technicznych (zjazdów i wyjazdów) w GTFS, propagowanych po
-    całodziennym łańcuchu pojazdu. Kursów technicznych nie publikują przewoźnicy kontraktowi
-    (Mobilis, PKS Grodzisk, ReloBus) — ich brygady wychodzą jako <b>nieznany</b>.
-    Postój zewnętrzny Wydział Włościańska pomijamy, gdy brygada ma też zjazd do zajezdni —
-    mówi on, gdzie autobus nocuje, a nie kto go obsługuje.
+    Zakład bierzemy wprost z pola <code>depot_id</code>, które zbiorkom.live dokłada do
+    <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
+    kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
     Górny indeks przy numerze brygady oznacza, że kursuje ona tylko w części dni danej kolumny.<br>
     Dane: <a href="https://ztm.waw.pl">ZTM Warszawa</a> ·
-    GTFS: <a href="https://mkuran.pl/gtfs/">Mikołaj Kuranowski</a> ·
+    GTFS: <a href="https://zbiorkom.live">zbiorkom.live</a> ·
     kształty tras: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap (ODbL)</a>
   </div>
 <script>
@@ -462,24 +449,23 @@ def main():
     feed = Feed(args.feed)
     version = feed.version()
 
-    latest = pick_services(feed)
-    services = {sid: code for code, (_date, sid) in latest.items()}
-    dates = [date for date, _sid in latest.values()]
+    days = pick_days(feed)
+    services = read_services(feed, days)
     print(f"feed_version: {version}", file=sys.stderr)
-    for code, (date, sid) in sorted(latest.items()):
-        print(f"  {DAY_NAME[code]:<10} {sid}", file=sys.stderr)
+    for code, date in sorted(days.items()):
+        print(f"  {DAY_NAME[code]:<10} {date}", file=sys.stderr)
 
-    pairs, block_depots, tech = read_trips(feed, services)
-    print(f"{len(pairs)} (day, line, brigade) slots · {len(tech)} technical trips", file=sys.stderr)
-    ends = read_technical_terminals(feed, tech, dates)
-    pair_depots = resolve_depots(feed, pairs, block_depots, tech, ends)
+    pair_depots, unmapped = read_trips(feed, services)
+    print(f"{len(pair_depots)} (day, line, brigade) slots", file=sys.stderr)
+    for depot, n in sorted(unmapped.items(), key=lambda kv: -kv[1]):
+        print(f"  WARNING: depot_id {depot!r} not in DEPOTS ({n} trips)", file=sys.stderr)
 
     payload = {
         "generated": f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}",
         "feedVersion": version,
-        "services": {code: {"date": date, "serviceId": sid} for code, (date, sid) in latest.items()},
+        "services": {code: {"date": date.isoformat()} for code, date in days.items()},
         "depots": dict(sorted(DEPOT_FULL.items())),
-        "lines": group_rows(pair_depots, latest),
+        "lines": group_rows(pair_depots, days),
     }
 
     if usable(payload):
