@@ -27,6 +27,7 @@ import io
 import json
 import re
 import sys
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -70,6 +71,8 @@ DAY_GROUPS = [
     ("swiateczny", "Sobota / niedziela i święta", ("SbS", "NdS")),
 ]
 DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "niedziela"}
+
+ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
 
 UNKNOWN = "nieznany"
 DEPOT_ORDER = ["R-1", "R-2", "R-3", "R-4", "R-5", "R-6",
@@ -319,7 +322,10 @@ def build_html(payload):
 
     body = []
     for line in sorted(lines, key=line_sort):
-        cells = [f'<th class="line">{html.escape(line)}</th>']
+        url = ROUTE_URL.format(urllib.parse.quote(line.lower()))
+        cells = [f'<th class="line"><a href="{html.escape(url)}" target="_blank" '
+                 f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">'
+                 f'{html.escape(line)}</a></th>']
         for group_key, _title, _codes in DAY_GROUPS:
             depots = lines[line].get(group_key)
             if not depots:
@@ -374,6 +380,9 @@ def build_html(payload):
   thead th:first-child {{ left: 0; z-index: 4; background: #f0f0f0; }}
   th.line {{ position: sticky; left: 0; background: #f4f4f4; z-index: 2; width: 1%;
     white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }}
+  th.line a {{ color: inherit; text-decoration: none; }}
+  th.line a:hover {{ color: #06c; text-decoration: underline; }}
+  th.line a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
   td {{ background: #fff; }}
   td.none {{ color: #bbb; }}
   .g {{ margin: 1px 0; line-height: 1.5; }}
