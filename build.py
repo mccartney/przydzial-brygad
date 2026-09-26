@@ -70,6 +70,8 @@ DAY_GROUPS = [
     ("powszedni", "Dzień powszedni", ("PcS", "PtS")),
     ("swiateczny", "Sobota / niedziela i święta", ("SbS", "NdS")),
 ]
+# One-letter tag for each column on the line cards.
+DAY_SHORT = {"powszedni": "DP", "swiateczny": "DŚ"}
 DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "niedziela"}
 
 ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
@@ -227,9 +229,10 @@ def group_rows(pair_depots, services_by_code):
                     (brigade, entry["only"])
                 )
     for groups in out.values():
-        for depots in groups.values():
+        for group_key, depots in groups.items():
             for brigades in depots.values():
                 brigades.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
+            groups[group_key] = {label: depots[label] for label in sorted(depots, key=depot_sort)}
     # Sorted so the committed brygady.json diffs line by line between rebuilds; the feed
     # lists trips in no particular order.
     return {line: out[line] for line in sorted(out, key=line_sort)}
@@ -260,44 +263,11 @@ def marker(only):
     return f'<sup class="mk" title="tylko {html.escape(names)}">{html.escape(short)}</sup>'
 
 
-def same_numbering(a, b):
-    """Do two brigade numbers belong to one run? '9'+'10' yes, '9'+'010' no, '09'+'010' no.
-
-    ZTM uses the leading zero to tell two brigade series apart, so a run may never cross
-    from the unpadded series into the padded one (or between padding widths).
-    """
-    if not (a.isdigit() and b.isdigit()):
-        return False
-    if a.startswith("0") != b.startswith("0"):
-        return False
-    return len(a) == len(b) if a.startswith("0") else True
-
-
 def format_brigades(entries):
-    """Sorted brigade list with consecutive runs compressed: '2-4, 6-7, 9, 017-020'."""
+    """Sorted, comma-separated brigade list, each one spelled out: '2, 3, 4, 9, 017'."""
     entries = sorted(entries, key=lambda e: brigade_sort(e[0]) + (e[0],))
-    out, run = [], []
-
-    def flush():
-        if not run:
-            return
-        only = run[0][1]
-        text = (f"{html.escape(run[0][0])}-{html.escape(run[-1][0])}" if len(run) >= 2
-                else html.escape(run[0][0]))
-        out.append(text + (marker(only) if only else ""))
-        run.clear()
-
-    for brigade, only in entries:
-        if run:
-            prev, prev_only = run[-1]
-            # Same day-group flag and an unbroken step of 1 within the same series.
-            if only == prev_only and same_numbering(prev, brigade) and int(brigade) - int(prev) == 1:
-                run.append((brigade, only))
-                continue
-        flush()
-        run.append((brigade, only))
-    flush()
-    return ", ".join(out)
+    return ", ".join(html.escape(brigade) + (marker(only) if only else "")
+                     for brigade, only in entries)
 
 
 def build_html(payload):
@@ -312,18 +282,16 @@ def build_html(payload):
                 for part in label.split(" / "):
                     counts[part] = counts.get(part, 0) + len(brigades)
 
-    head = "".join(f"<th>{html.escape(title)}</th>" for _k, title, _c in DAY_GROUPS)
-
-    body = []
+    cards = []
     for line in sorted(lines, key=line_sort):
         url = ROUTE_URL.format(urllib.parse.quote(line.lower()))
-        cells = [f'<th class="line"><a href="{html.escape(url)}" target="_blank" '
-                 f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">'
-                 f'{html.escape(line)}</a></th>']
-        for group_key, _title, _codes in DAY_GROUPS:
+        rows = []
+        for group_key, title, _codes in DAY_GROUPS:
+            tag = (f'<span class="dt" title="{html.escape(title)}">'
+                   f'{html.escape(DAY_SHORT[group_key])}</span>')
             depots = lines[line].get(group_key)
             if not depots:
-                cells.append('<td class="none">—</td>')
+                rows.append(f'<div class="day">{tag}<div class="none">—</div></div>')
                 continue
             blocks = []
             for label in sorted(depots, key=depot_sort):
@@ -333,10 +301,14 @@ def build_html(payload):
                 tip = html.escape(full_name.get(label, label))
                 blocks.append(
                     f'<div class="g"><span class="d" style="background:{color}" title="{tip}">'
-                    f'{html.escape(label)}</span>{format_brigades(depots[label])}</div>'
+                    f'{html.escape(label)}</span><span>{format_brigades(depots[label])}</span></div>'
                 )
-            cells.append("<td>" + "".join(blocks) + "</td>")
-        body.append("<tr>" + "".join(cells) + "</tr>")
+            rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
+        cards.append(
+            f'<article class="card"><h2><a href="{html.escape(url)}" target="_blank" '
+            f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a></h2>'
+            + "".join(rows) + "</article>"
+        )
 
     legend = []
     for label in DEPOT_ORDER:
@@ -365,26 +337,25 @@ def build_html(payload):
   .tools {{ margin: 14px 0 0; }}
   #q {{ font: inherit; font-size: 13px; padding: 5px 9px; width: 220px;
     border: 1px solid #ccc; border-radius: 5px; }}
-  .scroll {{ overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; margin-top: 10px; }}
-  table {{ border-collapse: collapse; font-size: 13px; width: 100%; }}
-  th, td {{ text-align: left; vertical-align: top; padding: 5px 8px;
-    border-bottom: 1px solid #eee; }}
-  thead th {{ position: sticky; top: 0; background: #fafafa; z-index: 3; color: #555;
-    font-weight: 600; border-bottom: 1px solid #ddd; }}
-  thead th:first-child {{ left: 0; z-index: 4; background: #f0f0f0; }}
-  th.line {{ position: sticky; left: 0; background: #f4f4f4; z-index: 2; width: 1%;
-    white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }}
-  th.line a {{ color: inherit; text-decoration: none; }}
-  th.line a:hover {{ color: #06c; text-decoration: underline; }}
-  th.line a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
-  td {{ background: #fff; }}
-  td.none {{ color: #bbb; }}
-  .g {{ margin: 1px 0; line-height: 1.5; }}
-  .d {{ display: inline-block; min-width: 3.4em; margin-right: 6px; padding: 0 6px;
+  .cards {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+    gap: 10px; margin-top: 12px; font-size: 13px; }}
+  .card {{ border: 1px solid #e2e2e2; border-radius: 8px; padding: 7px 10px 8px;
+    background: #fff; }}
+  .card h2 {{ margin: 0 0 4px; font-size: 16px; font-variant-numeric: tabular-nums; }}
+  .card h2 a {{ color: inherit; text-decoration: none; }}
+  .card h2 a:hover {{ color: #06c; text-decoration: underline; }}
+  .card h2 a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
+  .day {{ display: grid; grid-template-columns: 2.1em 1fr; align-items: start;
+    padding: 3px 0; }}
+  .day + .day {{ border-top: 1px dashed #eee; }}
+  .dt {{ color: #999; font-size: 11px; font-weight: 600; line-height: 19px; cursor: help; }}
+  .none {{ color: #bbb; line-height: 19px; }}
+  .g {{ display: flex; align-items: baseline; margin: 1px 0; line-height: 1.5; }}
+  .d {{ flex: none; display: inline-block; min-width: 3.4em; margin-right: 6px; padding: 0 6px;
     border-radius: 4px; font-size: 11px; font-weight: 600; text-align: center;
     border: 1px solid rgba(0,0,0,0.10); }}
   .mk {{ color: #999; font-size: 9px; margin-left: 1px; }}
-  .legend {{ margin: 16px 0 4px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }}
+  .legend {{ margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }}
   .leg {{ display: inline-flex; align-items: center; gap: 5px; }}
   .sw {{ width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12);
     display: inline-block; }}
@@ -398,27 +369,25 @@ def build_html(payload):
     najnowsza edycja w feedzie · bez linii L</div>
   <div class="sub">źródło: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     feed {html.escape(payload["feedVersion"] or "?")} · zaktualizowano {payload["generated"]}</div>
-  <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
-  <div class="scroll"><table>
-    <thead><tr><th>linia</th>{head}</tr></thead>
-    <tbody>{''.join(body)}</tbody>
-  </table></div>
   <div class="legend">{''.join(legend)}</div>
+  <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta</div>
+  <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
+  <div class="cards">{''.join(cards)}</div>
   <div class="foot">
     Zakład bierzemy wprost z pola <code>depot_id</code>, które feed GTFS dokłada do
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
     kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
-    Górny indeks przy numerze brygady oznacza, że kursuje ona tylko w części dni danej kolumny.<br>
+    Górny indeks przy numerze brygady oznacza, że kursuje ona tylko w części dni danego wiersza (DP lub DŚ).<br>
     Dane: <a href="https://ztm.waw.pl">ZTM Warszawa</a> ·
     GTFS: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     kształty tras: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap (ODbL)</a>
   </div>
 <script>
   const q = document.getElementById('q');
-  const rows = [...document.querySelectorAll('tbody tr')];
+  const cards = [...document.querySelectorAll('.card')];
   q.addEventListener('input', () => {{
     const t = q.value.trim().toLowerCase();
-    for (const r of rows) r.hidden = t && !r.textContent.toLowerCase().includes(t);
+    for (const c of cards) c.hidden = t && !c.textContent.toLowerCase().includes(t);
   }});
 </script>
 </body></html>
@@ -466,7 +435,10 @@ def main():
     payload = {
         "generated": f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}",
         "feedVersion": version,
-        "services": {code: {"date": date.isoformat()} for code, (date, _sid) in days.items()},
+        # In column order, not pick_days' order: that walks a set, which Python's string
+        # hashing reshuffles on every run.
+        "services": {code: {"date": days[code][0].isoformat()}
+                     for _k, _t, codes in DAY_GROUPS for code in codes if code in days},
         "depots": dict(sorted(DEPOT_FULL.items())),
         "lines": group_rows(pair_depots, days),
     }

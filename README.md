@@ -4,7 +4,7 @@ https://mccartney.github.io/przydzial-brygad/
 
 Codziennie budowana strona: jedna tabela, wiersz na linię autobusową, kolumny **Dzień
 powszedni** i **Sobota / niedziela i święta**, a w komórce brygady pogrupowane po
-obsługującym je zakładzie (`R-1: 1, 5, 8, 10, 13-14, 017 · R-2: 2-4, 6-7, …`).
+obsługującym je zakładzie (`R-1: 1, 5, 8, 10, 13, 14, 017 · R-2: 2, 3, 4, 6, 7, …`).
 Bez linii lokalnych `L-*`.
 
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
