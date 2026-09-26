@@ -40,9 +40,9 @@ DATA = Path("brygady.json")
 OUT = Path("przydzial.html")
 
 BUS_ROUTE_TYPE = "3"
-# Suburban "L" lines are left out of the table. This feed does name their commune
+# Local "L" lines are left out of the table. This feed does name their commune
 # operators (depot_id G-14, G-17, G-30, G-42), so they could be added.
-SUBURBAN_LINE = re.compile(r"^L-?\d+$")
+LOCAL_LINE = re.compile(r"^L-?\d+$")
 # depot_id -> (label used in the table, full name for the legend). MZA's codes
 # are internal — the parenthesised letter is the site's initial — so they are relabelled
 # to the R-n numbering ZTM and MZA use in public. Verified against the depot stops the
@@ -169,7 +169,7 @@ def read_trips(feed, services):
     """
     bus_lines = {}
     for r in feed.rows("routes"):
-        if r["route_type"] == BUS_ROUTE_TYPE and not SUBURBAN_LINE.match(r["route_short_name"]):
+        if r["route_type"] == BUS_ROUTE_TYPE and not LOCAL_LINE.match(r["route_short_name"]):
             bus_lines[r["route_id"]] = r["route_short_name"]
 
     pair_depots = {}
