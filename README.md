@@ -17,4 +17,4 @@ się zepsuty. Bez zależności, sama biblioteka standardowa.
 ## Źródła danych i licencje
 
 - [Zarząd Transportu Miejskiego w Warszawie](https://ztm.waw.pl)
-- [GTFS: zbiorkom.live](https://zbiorkom.live) — `https://cdn.zbiorkom.live/gtfs/warsaw.zip`
+- [GTFS: mccartney/WarsawGTFS](https://github.com/mccartney/WarsawGTFS) — `https://436.pl/gtfs/warsaw.zip`
