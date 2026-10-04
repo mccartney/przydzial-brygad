@@ -328,9 +328,11 @@ def build_html(payload):
 <html lang="pl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Przydział brygad — zakłady i przewoźnicy WTP</title>
+<link rel="stylesheet" href="https://436.pl/_/436.css">
 <style>
   :root {{ font-family: -apple-system, system-ui, sans-serif; }}
   body {{ margin: 24px; color: #1b1b1b; }}
+  .h436 {{ margin-bottom: 14px; }}
   h1 {{ font-size: 20px; margin: 0 0 4px; }}
   .sub {{ color: #666; font-size: 13px; margin-bottom: 3px; }}
   .sub a {{ color: #06c; }}
@@ -364,6 +366,8 @@ def build_html(payload):
   .foot a {{ color: #06c; }}
 </style></head>
 <body>
+  <header class="h436"><a href="https://436.pl/"><img src="https://436.pl/436.png" alt="436"
+    width="480" height="289">.pl/</a><span>przydzial-brygad/</span></header>
   <h1>Przydział brygad — zakłady i przewoźnicy WTP</h1>
   <div class="sub">{len(lines)} linii autobusowych · rozkład: {html.escape(day_note)} —
     najnowsza edycja w feedzie · bez linii L</div>
