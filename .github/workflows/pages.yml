@@ -34,6 +34,10 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: public
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: public
 
   deploy:
     needs: build
@@ -44,3 +48,26 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+
+  # https://436.pl/przydzial-brygad/ (role defined in mccartney/436.pl,
+  # terraform/modules/przydzial-brygad/). No `environment` here: the role trusts the
+  # ref-based sub claim of main, which an environment would replace.
+  publish-436:
+    needs: build
+    if: github.repository == 'mccartney/przydzial-brygad' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: public
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::214582020536:role/github-actions-przydzial-brygad-publisher
+          aws-region: eu-west-1
+      - name: Upload to 436.pl
+        run: |
+          for f in index.html brygady.json; do
+            aws s3 cp "public/$f" "s3://436-pl-site/przydzial-brygad/$f" --cache-control 'max-age=300'
+          done
+          aws cloudfront create-invalidation --distribution-id EGD7JSNH7M1YA --paths '/przydzial-brygad/*'

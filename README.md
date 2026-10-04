@@ -1,6 +1,6 @@
 # Przydział brygad — zakłady i przewoźnicy WTP
 
-https://mccartney.github.io/przydzial-brygad/
+https://436.pl/przydzial-brygad/ (także https://mccartney.github.io/przydzial-brygad/)
 
 Codziennie budowana strona: jedna tabela, wiersz na linię autobusową, kolumny **Dzień
 powszedni** i **Sobota / niedziela i święta**, a w komórce brygady pogrupowane po
