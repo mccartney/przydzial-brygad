@@ -137,34 +137,91 @@ def download(path):
 SERVICE_ID = re.compile(r"^(\d{4})-(\d{2})-(\d{2}):(PcS|PtS|SbS|NdS)$")
 
 
-def pick_days(feed):
-    """Newest service of each day type: {code: (date, service_id)}.
+def read_editions(feed):
+    """Every bus timetable edition in the feed: {service_id: (date, day-type code)}.
 
-    The feed carries one service per day of its first week and then repeats that week's
+    The feed carries one service per day of its first week or so and then repeats those
     services on the dates after it, so the last calendar date of a type can point back to
     an older edition. The date inside the service id is what orders the editions. The day
     type comes from the id as well, so a public holiday on the Sunday timetable already
     counts as NdS.
     """
-    days = {}
+    editions = {}
     for sid in {r["service_id"] for r in feed.rows("calendar_dates")}:
         m = SERVICE_ID.match(sid)
-        if not m:
-            continue
-        date = datetime.date(int(m[1]), int(m[2]), int(m[3]))
-        code = m[4]
+        if m:
+            editions[sid] = (datetime.date(int(m[1]), int(m[2]), int(m[3])), m[4])
+    return editions
+
+
+def pick_days(editions):
+    """Newest edition of each day type: {code: (date, service_id)}."""
+    days = {}
+    for sid, (date, code) in editions.items():
         if code not in days or date > days[code][0]:
             days[code] = (date, sid)
     return days
 
 
-def read_services(days):
-    """service_id -> the day-type codes it runs under, for the picked services only."""
-    return {sid: {code} for code, (_date, sid) in days.items()}
+def newest_slots(slots, days):
+    """Narrow read_trips' per-edition slots to the newest edition of each day type,
+    re-keyed by the day-type code: (code, line, brigade) -> set of depot labels."""
+    newest = {sid: code for code, (_date, sid) in days.items()}
+    return {(newest[sid], line, brigade): depots
+            for (sid, line, brigade), depots in slots.items() if sid in newest}
+
+
+def find_changes(slots, editions):
+    """Depot changes between the editions the feed carries, oldest first.
+
+    Each edition is held against the one for the same weekday a week earlier, not just
+    the previous edition of its day type: PcS covers Monday to Thursday, and a brigade
+    that runs on Thursdays only would otherwise "appear" and "vanish" every week. A
+    difference found that way is then dated back to the first edition since which the
+    new state holds without a break, which is where the change really starts.
+
+    Returns [{"date", "line", "brigade", "group", "old", "new"}], with old/new a depot
+    label or None for a brigade that does not run.
+    """
+    state = {}  # sid -> {(line, brigade): depot label}
+    for (sid, line, brigade), depots in slots.items():
+        state.setdefault(sid, {})[(line, brigade)] = depot_label(depots)
+    by_date = {(date, code): sid for sid, (date, code) in editions.items()}
+    group_of = {code: key for key, _t, codes in DAY_GROUPS for code in codes}
+
+    changes = {}
+    for sid, (date, code) in editions.items():
+        before = by_date.get((date - datetime.timedelta(days=7), code))
+        if before is None:
+            continue
+        now, then = state.get(sid, {}), state.get(before, {})
+        # Same-type editions in between, newest first, to date the change back through.
+        between = sorted((d for (d, c) in by_date if c == code and before_date(d, date, 7)),
+                         reverse=True)
+        for key in set(now) | set(then):
+            new, old = now.get(key), then.get(key)
+            if new == old:
+                continue
+            since = date
+            for d in between:
+                if state.get(by_date[(d, code)], {}).get(key) != new:
+                    break
+                since = d
+            line, brigade = key
+            changes[(since, line, brigade, group_of[code], old, new)] = None
+    return [{"date": since.isoformat(), "line": line, "brigade": brigade, "group": group,
+             "old": old, "new": new}
+            for since, line, brigade, group, old, new in sorted(
+                changes, key=lambda c: (c[0], line_sort(c[1]), brigade_sort(c[2]) + (c[2],), c[3]))]
+
+
+def before_date(d, date, days):
+    """d falls in the window of `days` days that ends just before `date`, exclusive."""
+    return date - datetime.timedelta(days=days) < d < date
 
 
 def read_trips(feed, services):
-    """One pass over trips.txt: (day-type, line, brigade) -> set of depot labels.
+    """One pass over trips.txt: (service_id, line, brigade) -> set of depot labels.
 
     Returns that alongside a count of depot_id values missing from DEPOTS, so a renamed
     or newly added operator shows up in the log instead of quietly becoming "nieznany".
@@ -177,13 +234,13 @@ def read_trips(feed, services):
     pair_depots = {}
     unmapped = {}
     for t in feed.rows("trips"):
-        codes = services.get(t["service_id"])
+        sid = t["service_id"]
         line = bus_lines.get(t["route_id"])
         # block_short_name (the brigade) and depot_id are extensions, not GTFS: read them
         # defensively so that a feed dropping either fails the coverage guard instead of
         # the parse.
         brigade = t.get("block_short_name")
-        if not codes or line is None or not brigade:
+        if sid not in services or line is None or not brigade:
             continue
         depot = t.get("depot_id")
         label = None
@@ -192,10 +249,9 @@ def read_trips(feed, services):
             DEPOT_FULL.setdefault(label, full)
         elif depot:
             unmapped[depot] = unmapped.get(depot, 0) + 1
-        for code in codes:
-            slot = pair_depots.setdefault((code, line, brigade), set())
-            if label:
-                slot.add(label)
+        slot = pair_depots.setdefault((sid, line, brigade), set())
+        if label:
+            slot.add(label)
     return pair_depots, unmapped
 
 
@@ -224,7 +280,7 @@ def group_rows(pair_depots, services_by_code):
     for line, groups in table.items():
         for group_key, brigades in groups.items():
             for brigade, entry in brigades.items():
-                label = " / ".join(sorted(entry["depots"], key=depot_sort)) or UNKNOWN
+                label = depot_label(entry["depots"])
                 out.setdefault(line, {}).setdefault(group_key, {}).setdefault(label, []).append(
                     (brigade, entry["only"])
                 )
@@ -236,6 +292,11 @@ def group_rows(pair_depots, services_by_code):
     # Sorted so the committed brygady.json diffs line by line between rebuilds; the feed
     # lists trips in no particular order.
     return {line: out[line] for line in sorted(out, key=line_sort)}
+
+
+def depot_label(depots):
+    """'R-1', or 'R-1 / R-2' for a brigade split across depots, or 'nieznany'."""
+    return " / ".join(sorted(depots, key=depot_sort)) or UNKNOWN
 
 
 def depot_sort(label):
@@ -270,6 +331,54 @@ def format_brigades(entries):
                      for brigade, only in entries)
 
 
+def depot_badge(label, full_name):
+    # A brigade split across two depots keeps the first one's colour, so it never reads
+    # as grey "nieznany".
+    color = DEPOT_COLOR.get(label.split(" / ")[0], DEPOT_COLOR[UNKNOWN])
+    tip = html.escape(full_name.get(label, label))
+    return f'<span class="d" style="background:{color}" title="{tip}">{html.escape(label)}</span>'
+
+
+def short_date(iso):
+    """'2026-10-12' -> '12.10'."""
+    d = datetime.date.fromisoformat(iso)
+    return f"{d.day}.{d.month:02d}"
+
+
+def build_changes(payload):
+    """The list under the cards: '116/01 DP od 12.10: R-1 → R-2', one item per change."""
+    changes = payload.get("changes")
+    editions = payload.get("editions")
+    if changes is None or not editions:
+        return ""
+    full_name = payload["depots"]
+    items = []
+    for c in changes:
+        old = c["old"] and depot_badge(c["old"], full_name)
+        new = c["new"] and depot_badge(c["new"], full_name)
+        if old and new:
+            what = f"{old} → {new}"
+        elif new:
+            what = f"nowa brygada {new}"
+        else:
+            what = f"likwidacja <span class=\"was\">(było {old})</span>"
+        group = c["group"]
+        items.append(
+            f'<li><b>{html.escape(c["line"])}/{html.escape(c["brigade"])}</b> '
+            f'<span class="dt" title="{html.escape(dict((k, t) for k, t, _ in DAY_GROUPS)[group])}">'
+            f'{DAY_SHORT[group]}</span> od {short_date(c["date"])}: {what}</li>'
+        )
+    span = f"{short_date(editions[0])}–{short_date(editions[-1])}"
+    body = f'<ul class="changes">{"".join(items)}</ul>' if items else \
+        '<div class="sub">Brak zmian.</div>'
+    return f"""<section>
+    <h2 class="sec">Zmiany przydziału</h2>
+    <div class="sub">Rozkłady w feedzie: {span}. Każdą edycję porównujemy z tym samym dniem
+      tygodnia tydzień wcześniej; karty powyżej pokazują stan po wszystkich zmianach.</div>
+    {body}
+  </section>"""
+
+
 def build_html(payload):
     lines = payload["lines"]
     services = payload["services"]
@@ -295,13 +404,9 @@ def build_html(payload):
                 continue
             blocks = []
             for label in sorted(depots, key=depot_sort):
-                # A brigade split across two depots keeps the first one's colour, so it
-                # never reads as grey "nieznany".
-                color = DEPOT_COLOR.get(label.split(" / ")[0], DEPOT_COLOR[UNKNOWN])
-                tip = html.escape(full_name.get(label, label))
                 blocks.append(
-                    f'<div class="g"><span class="d" style="background:{color}" title="{tip}">'
-                    f'{html.escape(label)}</span><span>{format_brigades(depots[label])}</span></div>'
+                    f'<div class="g">{depot_badge(label, full_name)}'
+                    f'<span>{format_brigades(depots[label])}</span></div>'
                 )
             rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
         cards.append(
@@ -362,6 +467,11 @@ def build_html(payload):
   .sw {{ width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12);
     display: inline-block; }}
   .cnt {{ color: #999; }}
+  .sec {{ font-size: 16px; margin: 22px 0 4px; }}
+  .changes {{ margin: 8px 0 0; padding-left: 20px; font-size: 13px; line-height: 1.9; }}
+  .changes .d {{ min-width: 0; margin: 0; }}
+  .changes .dt {{ line-height: inherit; }}
+  .was {{ color: #999; }}
   .foot {{ margin-top: 14px; color: #777; font-size: 12px; line-height: 1.6; }}
   .foot a {{ color: #06c; }}
 </style></head>
@@ -377,6 +487,7 @@ def build_html(payload):
   <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta</div>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="cards">{''.join(cards)}</div>
+  {build_changes(payload)}
   <div class="foot">
     Zakład bierzemy wprost z pola <code>depot_id</code>, które feed GTFS dokłada do
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
@@ -388,7 +499,7 @@ def build_html(payload):
   </div>
 <script>
   const q = document.getElementById('q');
-  const cards = [...document.querySelectorAll('.card')];
+  const cards = [...document.querySelectorAll('.card, .changes li')];
   q.addEventListener('input', () => {{
     const t = q.value.trim().toLowerCase();
     for (const c of cards) c.hidden = t && !c.textContent.toLowerCase().includes(t);
@@ -425,14 +536,16 @@ def main():
     feed = Feed(args.feed)
     version = feed.version()
 
-    days = pick_days(feed)
-    services = read_services(days)
-    print(f"feed_version: {version}", file=sys.stderr)
+    editions = read_editions(feed)
+    days = pick_days(editions)
+    print(f"feed_version: {version} · {len(editions)} editions", file=sys.stderr)
     for code, (date, sid) in sorted(days.items()):
         print(f"  {DAY_NAME[code]:<10} {sid}", file=sys.stderr)
 
-    pair_depots, unmapped = read_trips(feed, services)
-    print(f"{len(pair_depots)} (day, line, brigade) slots", file=sys.stderr)
+    slots, unmapped = read_trips(feed, editions)
+    pair_depots = newest_slots(slots, days)
+    changes = find_changes(slots, editions)
+    print(f"{len(pair_depots)} (day, line, brigade) slots · {len(changes)} changes", file=sys.stderr)
     for depot, n in sorted(unmapped.items(), key=lambda kv: -kv[1]):
         print(f"  WARNING: depot_id {depot!r} not in DEPOTS ({n} trips)", file=sys.stderr)
 
@@ -445,6 +558,10 @@ def main():
                      for _k, _t, codes in DAY_GROUPS for code in codes if code in days},
         "depots": dict(sorted(DEPOT_FULL.items())),
         "lines": group_rows(pair_depots, days),
+        # Dated depot changes across the editions, for the list under the cards; the
+        # cards themselves show the newest edition, i.e. the state after all of these.
+        "editions": sorted({date.isoformat() for date, _code in editions.values()}),
+        "changes": changes,
     }
 
     if usable(payload):
