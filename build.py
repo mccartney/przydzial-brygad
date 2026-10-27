@@ -258,18 +258,24 @@ def read_trips(feed, services):
 def group_rows(pair_depots, services_by_code):
     """Collapse the day-types into the table's two columns.
 
+    The newest editions of a group's day types need not share a date: right after a
+    reassignment the feed can carry Monday–Thursday from after it but Friday only from
+    before it. Merging those would show a moved brigade as "R-2 / R-4", so a brigade takes
+    its depot from the newest edition it runs in; one running on Fridays only keeps Friday's.
+
     Returns {line: {group_key: {depot_label: [(brigade, only_in_codes_or_None), ...]}}}.
     """
     table = {}
     for group_key, _title, codes in DAY_GROUPS:
         live = [c for c in codes if c in services_by_code]
-        for code in live:
+        # Oldest first, so the newest edition a brigade runs in is the one left standing.
+        for code in sorted(live, key=lambda c: services_by_code[c][0]):
             for (c, line, brigade), depots in pair_depots.items():
                 if c != code:
                     continue
                 slot = table.setdefault(line, {}).setdefault(group_key, {})
                 entry = slot.setdefault(brigade, {"depots": set(), "codes": set()})
-                entry["depots"] |= depots
+                entry["depots"] = depots
                 entry["codes"].add(code)
         # A brigade that skips part of the group (e.g. Friday only) gets flagged.
         for line, groups in table.items():

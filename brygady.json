@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-26",
+  "generated": "2026-10-27",
   "feedVersion": "2026-09-26 18:07:32",
   "services": {
     "PcS": {
@@ -15605,5 +15605,1714 @@
         ]
       }
     }
-  }
+  },
+  "editions": [
+    "2026-09-26",
+    "2026-09-27",
+    "2026-09-28",
+    "2026-09-29",
+    "2026-09-30",
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-03",
+    "2026-10-04"
+  ],
+  "changes": [
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "111",
+      "brigade": "M5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "9",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "12",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "433",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "448",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "529",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "531",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "116",
+      "brigade": "537",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "541",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "542",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "543",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "544",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "545",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "546",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "547",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "140",
+      "brigade": "548",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "259",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "371",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "174",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "M5",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "M6",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-2"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "M7",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-2"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "178",
+      "brigade": "M8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-2"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "10",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "11",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "12",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "433",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "448",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "529",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "531",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "180",
+      "brigade": "537",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "185",
+      "brigade": "030",
+      "group": "swiateczny",
+      "old": "nieznany",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "185",
+      "brigade": "031",
+      "group": "swiateczny",
+      "old": "nieznany",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "193",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "Mobilis"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "207",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "300",
+      "brigade": "M1",
+      "group": "swiateczny",
+      "old": "Mobilis",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "503",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "503",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "503",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "503",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "503",
+      "brigade": "9",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "519",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "519",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "519",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "519",
+      "brigade": "M4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "519",
+      "brigade": "M6",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "521",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "521",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "521",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "521",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "521",
+      "brigade": "M7",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "541",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "542",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "543",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "544",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "545",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "546",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "547",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "738",
+      "brigade": "548",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N34",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N34",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N34",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "156",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "257",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "260",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "261",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "262",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N36",
+      "brigade": "371",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N41",
+      "brigade": "181",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": "R-6"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N46",
+      "brigade": "181",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": "R-6"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N86",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N86",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N86",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-03",
+      "line": "N86",
+      "brigade": "262",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "Z40",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-03",
+      "line": "Z40",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "111",
+      "brigade": "M5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "9",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "12",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "433",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "448",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "529",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "531",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "116",
+      "brigade": "537",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "541",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "542",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "543",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "544",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "545",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "546",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "547",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "140",
+      "brigade": "548",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "259",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "371",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "174",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "178",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "178",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "178",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "178",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "178",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "10",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "11",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "12",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "433",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "448",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "529",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "531",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "180",
+      "brigade": "537",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "193",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": null,
+      "new": "Mobilis"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "207",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "266",
+      "brigade": "M1",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "266",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "266",
+      "brigade": "M3",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "300",
+      "brigade": "M1",
+      "group": "swiateczny",
+      "old": "Mobilis",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "300",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "Mobilis",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "503",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "503",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "503",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "503",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "518",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "519",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "519",
+      "brigade": "5",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "519",
+      "brigade": "M2",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "519",
+      "brigade": "M4",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "519",
+      "brigade": "M6",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "521",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "521",
+      "brigade": "6",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "521",
+      "brigade": "7",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-3"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "521",
+      "brigade": "8",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "521",
+      "brigade": "M7",
+      "group": "swiateczny",
+      "old": "R-3",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "1",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "2",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "3",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "4",
+      "group": "swiateczny",
+      "old": "R-4",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "541",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "542",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "543",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "544",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "545",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "546",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "547",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "738",
+      "brigade": "548",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-4"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N34",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N34",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N34",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "156",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "257",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "260",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "261",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "262",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N36",
+      "brigade": "371",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N41",
+      "brigade": "181",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": "R-6"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N46",
+      "brigade": "181",
+      "group": "swiateczny",
+      "old": "R-2",
+      "new": "R-6"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N86",
+      "brigade": "155",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N86",
+      "brigade": "158",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N86",
+      "brigade": "258",
+      "group": "swiateczny",
+      "old": null,
+      "new": "R-1"
+    },
+    {
+      "date": "2026-10-04",
+      "line": "N86",
+      "brigade": "262",
+      "group": "swiateczny",
+      "old": "R-1",
+      "new": null
+    }
+  ]
 }
