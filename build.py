@@ -346,27 +346,32 @@ def short_date(iso):
 
 
 def build_changes(payload):
-    """The list under the cards: '116/01 DP od 12.10: R-1 → R-2', one item per change."""
+    """The list under the cards: '116/01, 03 DP od 12.10: R-1 → R-2', one item per line,
+    day group, date and kind of change, with all the brigades it hits."""
     changes = payload.get("changes")
     editions = payload.get("editions")
     if changes is None or not editions:
         return ""
     full_name = payload["depots"]
-    items = []
+    # Changes come sorted by date, line, brigade, so each group keeps that order and
+    # its brigades come out sorted.
+    grouped = {}
     for c in changes:
-        old = c["old"] and depot_badge(c["old"], full_name)
-        new = c["new"] and depot_badge(c["new"], full_name)
+        grouped.setdefault((c["date"], c["line"], c["group"], c["old"], c["new"]), []).append(c["brigade"])
+    items = []
+    for (date, line, group, old, new), brigades in grouped.items():
+        old = old and depot_badge(old, full_name)
+        new = new and depot_badge(new, full_name)
         if old and new:
             what = f"{old} → {new}"
         elif new:
             what = f"nowa brygada {new}"
         else:
             what = f"likwidacja <span class=\"was\">(było {old})</span>"
-        group = c["group"]
         items.append(
-            f'<li><b>{html.escape(c["line"])}/{html.escape(c["brigade"])}</b> '
+            f'<li><b>{html.escape(line)}/{html.escape(", ".join(brigades))}</b> '
             f'<span class="dt" title="{html.escape(dict((k, t) for k, t, _ in DAY_GROUPS)[group])}">'
-            f'{DAY_SHORT[group]}</span> od {short_date(c["date"])}: {what}</li>'
+            f'{DAY_SHORT[group]}</span> od {short_date(date)}: {what}</li>'
         )
     span = f"{short_date(editions[0])}–{short_date(editions[-1])}"
     body = f'<ul class="changes">{"".join(items)}</ul>' if items else \
