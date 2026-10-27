@@ -353,13 +353,15 @@ def build_changes(payload):
     if changes is None or not editions:
         return ""
     full_name = payload["depots"]
-    # Changes come sorted by date, line, brigade, so each group keeps that order and
-    # its brigades come out sorted.
+    # Changes come sorted by date, line, brigade, so each group's brigades come out sorted.
     grouped = {}
     for c in changes:
         grouped.setdefault((c["date"], c["line"], c["group"], c["old"], c["new"]), []).append(c["brigade"])
+    group_order = [k for k, _t, _codes in DAY_GROUPS]
+    rows = sorted(grouped.items(), key=lambda kv: (
+        line_sort(kv[0][1]), kv[0][0], group_order.index(kv[0][2]), brigade_sort(kv[1][0]) + (kv[1][0],)))
     items = []
-    for (date, line, group, old, new), brigades in grouped.items():
+    for (date, line, group, old, new), brigades in rows:
         old = old and depot_badge(old, full_name)
         new = new and depot_badge(new, full_name)
         if old and new:
