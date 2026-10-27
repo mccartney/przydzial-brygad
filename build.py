@@ -77,6 +77,18 @@ DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "nie
 
 ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
 
+# Vehicle class from fleet_type, another trips.txt extension: "G-np18m" -> "G". Only the
+# bus classes; tram and rail types never reach the bus table anyway.
+VEHICLE_CLASS = re.compile(r"^([KMLGH])-")
+# Smallest first, the order a mixed line lists its classes in.
+VEHICLE_NAME = {
+    "K": "mini 8–10 m",
+    "M": "12 m",
+    "L": "12 m elektryczny",
+    "G": "przegubowy 18 m",
+    "H": "przegubowy elektryczny",
+}
+
 UNKNOWN = "nieznany"
 DEPOT_ORDER = ["R-1", "R-2", "R-3", "R-4", "R-5", "R-6",
                "Mobilis", "PKS Grodzisk", "Relobus", "KMŁ", UNKNOWN]
@@ -165,8 +177,8 @@ def pick_days(editions):
 
 
 def newest_slots(slots, days):
-    """Narrow read_trips' per-edition slots to the newest edition of each day type,
-    re-keyed by the day-type code: (code, line, brigade) -> set of depot labels."""
+    """Narrow read_trips' per-edition slots (depots or vehicle classes) to the newest
+    edition of each day type, re-keyed by the day-type code: (code, line, brigade) -> value."""
     newest = {sid: code for code, (_date, sid) in days.items()}
     return {(newest[sid], line, brigade): depots
             for (sid, line, brigade), depots in slots.items() if sid in newest}
@@ -224,8 +236,9 @@ def before_date(d, date, days):
 def read_trips(feed, services):
     """One pass over trips.txt: (service_id, line, brigade) -> set of depot labels.
 
-    Returns that alongside a count of depot_id values missing from DEPOTS, so a renamed
-    or newly added operator shows up in the log instead of quietly becoming "nieznany".
+    Returns that alongside the same slots' vehicle class letter (left out where fleet_type
+    is missing) and a count of depot_id values missing from DEPOTS, so a renamed or newly
+    added operator shows up in the log instead of quietly becoming "nieznany".
     """
     bus_lines = {}
     for r in feed.rows("routes"):
@@ -233,6 +246,7 @@ def read_trips(feed, services):
             bus_lines[r["route_id"]] = r["route_short_name"]
 
     pair_depots = {}
+    fleet = {}
     unmapped = {}
     for t in feed.rows("trips"):
         sid = t["service_id"]
@@ -253,10 +267,14 @@ def read_trips(feed, services):
         slot = pair_depots.setdefault((sid, line, brigade), set())
         if label:
             slot.add(label)
-    return pair_depots, unmapped
+        # A brigade runs one vehicle all day, so every trip of it carries the same class.
+        cls = VEHICLE_CLASS.match(t.get("fleet_type") or "")
+        if cls:
+            fleet[(sid, line, brigade)] = cls[1]
+    return pair_depots, fleet, unmapped
 
 
-def group_rows(pair_depots, services_by_code):
+def group_rows(pair_depots, fleet, services_by_code):
     """Collapse the day-types into the table's two columns.
 
     The newest editions of a group's day types need not share a date: right after a
@@ -264,7 +282,7 @@ def group_rows(pair_depots, services_by_code):
     before it. Merging those would show a moved brigade as "R-2 / R-4", so a brigade takes
     its depot from the newest edition it runs in; one running on Fridays only keeps Friday's.
 
-    Returns {line: {group_key: {depot_label: [(brigade, only_in_codes_or_None), ...]}}}.
+    Returns {line: {group_key: {depot_label: [(brigade, only_in_codes_or_None, class_or_None), ...]}}}.
     """
     table = {}
     for group_key, _title, codes in DAY_GROUPS:
@@ -277,6 +295,7 @@ def group_rows(pair_depots, services_by_code):
                 slot = table.setdefault(line, {}).setdefault(group_key, {})
                 entry = slot.setdefault(brigade, {"depots": set(), "codes": set()})
                 entry["depots"] = depots
+                entry["cls"] = fleet.get((c, line, brigade))
                 entry["codes"].add(code)
         # A brigade that skips part of the group (e.g. Friday only) gets flagged.
         for line, groups in table.items():
@@ -289,7 +308,7 @@ def group_rows(pair_depots, services_by_code):
             for brigade, entry in brigades.items():
                 label = depot_label(entry["depots"])
                 out.setdefault(line, {}).setdefault(group_key, {}).setdefault(label, []).append(
-                    (brigade, entry["only"])
+                    (brigade, entry["only"], entry["cls"])
                 )
     for groups in out.values():
         for group_key, depots in groups.items():
@@ -331,11 +350,29 @@ def marker(only):
     return f'<sup class="mk" title="tylko {html.escape(names)}">{html.escape(short)}</sup>'
 
 
-def format_brigades(entries):
-    """Sorted, comma-separated brigade list, each one spelled out: '2, 3, 4, 9, 017'."""
+def vehicle_tag(cls):
+    return f'<span class="vt" title="{html.escape(VEHICLE_NAME[cls])}">{cls}</span>'
+
+
+def entry_class(entry):
+    """Vehicle class of a brigade entry; brygady.json from before fleet_type has none."""
+    return entry[2] if len(entry) > 2 else None
+
+
+def format_brigades(entries, by_class=False):
+    """Sorted, comma-separated brigade list, each one spelled out: '2, 3, 4, 9, 017'.
+
+    With by_class, split into runs per vehicle class, each led by its letter:
+    'M 2, 3, 9 G 4, 017'."""
     entries = sorted(entries, key=lambda e: brigade_sort(e[0]) + (e[0],))
-    return ", ".join(html.escape(brigade) + (marker(only) if only else "")
-                     for brigade, only in entries)
+    runs = {}
+    for e in entries:
+        runs.setdefault(entry_class(e) if by_class else None, []).append(e)
+    out = []
+    for cls in sorted(runs, key=lambda c: list(VEHICLE_NAME).index(c) if c in VEHICLE_NAME else len(VEHICLE_NAME)):
+        text = ", ".join(html.escape(e[0]) + (marker(e[1]) if e[1] else "") for e in runs[cls])
+        out.append(f"{vehicle_tag(cls)} {text}" if cls else text)
+    return " ".join(out)
 
 
 def depot_badge(label, full_name):
@@ -408,6 +445,13 @@ def build_html(payload):
     cards = []
     for line in sorted(lines, key=line_sort):
         url = ROUTE_URL.format(urllib.parse.quote(line.lower()))
+        # One class for the whole line goes next to its number; otherwise every brigade
+        # list is split by class.
+        classes = {entry_class(e) for depots in lines[line].values()
+                   for brigades in depots.values() for e in brigades}
+        by_class = len(classes) > 1
+        sole = None if by_class else next(iter(classes), None)
+        line_tag = vehicle_tag(sole) if sole else ""
         rows = []
         for group_key, title, _codes in DAY_GROUPS:
             tag = (f'<span class="dt" title="{html.escape(title)}">'
@@ -420,12 +464,12 @@ def build_html(payload):
             for label in sorted(depots, key=depot_sort):
                 blocks.append(
                     f'<div class="g">{depot_badge(label, full_name)}'
-                    f'<span>{format_brigades(depots[label])}</span></div>'
+                    f'<span>{format_brigades(depots[label], by_class)}</span></div>'
                 )
             rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
         cards.append(
             f'<article class="card"><h2><a href="{html.escape(url)}" target="_blank" '
-            f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a></h2>'
+            f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a>{line_tag}</h2>'
             + "".join(rows) + "</article>"
         )
 
@@ -439,6 +483,7 @@ def build_html(payload):
             f'{html.escape(full)} <span class="cnt">{counts[label]}</span></span>'
         )
 
+    vehicle_note = " · ".join(f"<b>{c}</b> — {html.escape(n)}" for c, n in VEHICLE_NAME.items())
     day_note = " · ".join(
         f"{DAY_NAME[c]} {services[c]['date']}" for _k, _t, codes in DAY_GROUPS for c in codes if c in services
     )
@@ -475,6 +520,9 @@ def build_html(payload):
   .d {{ flex: none; display: inline-block; min-width: 3.4em; margin-right: 6px; padding: 0 6px;
     border-radius: 4px; font-size: 11px; font-weight: 600; text-align: center;
     border: 1px solid rgba(0,0,0,0.10); }}
+  .vt {{ display: inline-block; padding: 0 3px; border: 1px solid #ccc; border-radius: 3px;
+    color: #777; font-size: 10px; font-weight: 600; line-height: 1.3; cursor: help; }}
+  .card h2 .vt {{ margin-left: 6px; vertical-align: 2px; }}
   .mk {{ color: #999; font-size: 9px; margin-left: 1px; }}
   .legend {{ margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }}
   .leg {{ display: inline-flex; align-items: center; gap: 5px; }}
@@ -501,6 +549,7 @@ def build_html(payload):
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
   <div class="legend">{''.join(legend)}</div>
   <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta</div>
+  <div class="sub">{vehicle_note}</div>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="cards">{''.join(cards)}</div>
   {build_changes(payload)}
@@ -508,6 +557,7 @@ def build_html(payload):
     Zakład bierzemy wprost z pola <code>depot_id</code>, które feed GTFS dokłada do
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
     kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
+    Typ taboru (litera przy numerze linii lub przed brygadami) pochodzi z pola <code>fleet_type</code>.
     Górny indeks przy numerze brygady oznacza, że kursuje ona tylko w części dni danego wiersza (DP lub DŚ).<br>
     Dane: <a href="https://ztm.waw.pl">ZTM Warszawa</a> ·
     GTFS: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
@@ -558,7 +608,7 @@ def main():
     for code, (date, sid) in sorted(days.items()):
         print(f"  {DAY_NAME[code]:<10} {sid}", file=sys.stderr)
 
-    slots, unmapped = read_trips(feed, editions)
+    slots, fleet, unmapped = read_trips(feed, editions)
     pair_depots = newest_slots(slots, days)
     changes = find_changes(slots, editions)
     print(f"{len(pair_depots)} (day, line, brigade) slots · {len(changes)} changes", file=sys.stderr)
@@ -573,7 +623,7 @@ def main():
         "services": {code: {"date": days[code][0].isoformat()}
                      for _k, _t, codes in DAY_GROUPS for code in codes if code in days},
         "depots": dict(sorted(DEPOT_FULL.items())),
-        "lines": group_rows(pair_depots, days),
+        "lines": group_rows(pair_depots, newest_slots(fleet, days), days),
         # Dated depot changes across the editions, for the list under the cards; the
         # cards themselves show the newest edition, i.e. the state after all of these.
         "editions": sorted({date.isoformat() for date, _code in editions.values()}),
