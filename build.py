@@ -71,9 +71,14 @@ DAY_GROUPS = [
     ("powszedni", "Dzień powszedni", ("PcS", "PtS")),
     ("swiateczny", "Sobota / niedziela i święta", ("SbS", "NdS")),
 ]
-# One-letter tag for each column on the line cards.
+# Row tag on the line cards for a group whose day types all share one plan.
 DAY_SHORT = {"powszedni": "DP", "swiateczny": "DŚ"}
 DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "niedziela"}
+# Row tag for a single day type, used where a line's plan differs within its group.
+CODE_SHORT = {"PcS": "pon-czw", "PtS": "pt", "SbS": "sb", "NdS": "nd"}
+ROW_TITLE = {"DP": "Dzień powszedni", "DŚ": "Sobota / niedziela i święta",
+             "pon-czw": "poniedziałek–czwartek", "pt": "piątek", "sb": "sobota",
+             "nd": "niedziela i święta"}
 
 ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
 
@@ -275,46 +280,40 @@ def read_trips(feed, services):
 
 
 def group_rows(pair_depots, fleet, services_by_code):
-    """Collapse the day-types into the table's two columns.
+    """Lay out each line's card rows.
 
-    The newest editions of a group's day types need not share a date: right after a
-    reassignment the feed can carry Monday–Thursday from after it but Friday only from
-    before it. Merging those would show a moved brigade as "R-2 / R-4", so a brigade takes
-    its depot from the newest edition it runs in; one running on Fridays only keeps Friday's.
+    A group whose day types all run the same plan for the line (same brigades, depots and
+    vehicle classes) takes one row, "DP" or "DŚ". Otherwise each day type gets its own
+    row ("pon-czw" and "pt", "sb" and "nd"), an empty one where the line does not run that
+    day. Each day type shows its own newest edition, so nothing is merged across editions.
 
-    Returns {line: {group_key: {depot_label: [(brigade, only_in_codes_or_None, class_or_None), ...]}}}.
+    Returns {line: {row_tag: {depot_label: [(brigade, class_or_None), ...]}}}.
     """
-    table = {}
-    for group_key, _title, codes in DAY_GROUPS:
-        live = [c for c in codes if c in services_by_code]
-        # Oldest first, so the newest edition a brigade runs in is the one left standing.
-        for code in sorted(live, key=lambda c: services_by_code[c][0]):
-            for (c, line, brigade), depots in pair_depots.items():
-                if c != code:
-                    continue
-                slot = table.setdefault(line, {}).setdefault(group_key, {})
-                entry = slot.setdefault(brigade, {"depots": set(), "codes": set()})
-                entry["depots"] = depots
-                entry["cls"] = fleet.get((c, line, brigade))
-                entry["codes"].add(code)
-        # A brigade that skips part of the group (e.g. Friday only) gets flagged.
-        for line, groups in table.items():
-            for brigade, entry in groups.get(group_key, {}).items():
-                entry["only"] = None if entry["codes"] == set(live) else sorted(entry["codes"])
+    plans = {}  # line -> code -> {brigade: (depot label, class)}
+    for (code, line, brigade), depots in pair_depots.items():
+        plans.setdefault(line, {}).setdefault(code, {})[brigade] = (
+            depot_label(depots), fleet.get((code, line, brigade)))
 
     out = {}
-    for line, groups in table.items():
-        for group_key, brigades in groups.items():
-            for brigade, entry in brigades.items():
-                label = depot_label(entry["depots"])
-                out.setdefault(line, {}).setdefault(group_key, {}).setdefault(label, []).append(
-                    (brigade, entry["only"], entry["cls"])
-                )
-    for groups in out.values():
-        for group_key, depots in groups.items():
+    for line, by_code in plans.items():
+        rows = {}
+        for group_key, _title, codes in DAY_GROUPS:
+            live = [c for c in codes if c in services_by_code]
+            if not any(by_code.get(c) for c in live):
+                continue
+            if all(by_code.get(c) == by_code.get(live[0]) for c in live):
+                rows[DAY_SHORT[group_key]] = by_code[live[0]]
+            else:
+                for c in live:
+                    rows[CODE_SHORT[c]] = by_code.get(c, {})
+        out[line] = {}
+        for tag, plan in rows.items():
+            depots = {}
+            for brigade, (label, cls) in plan.items():
+                depots.setdefault(label, []).append((brigade, cls))
             for brigades in depots.values():
                 brigades.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
-            groups[group_key] = {label: depots[label] for label in sorted(depots, key=depot_sort)}
+            out[line][tag] = {label: depots[label] for label in sorted(depots, key=depot_sort)}
     # Sorted so the committed brygady.json diffs line by line between rebuilds; the feed
     # lists trips in no particular order.
     return {line: out[line] for line in sorted(out, key=line_sort)}
@@ -343,20 +342,13 @@ def line_sort(line):
     return (2, line, 0, line)
 
 
-def marker(only):
-    """Superscript flag for a brigade that runs on only part of the merged day group."""
-    names = ", ".join(DAY_NAME[c] for c in only)
-    short = "".join(c[:2].lower() for c in only)
-    return f'<sup class="mk" title="tylko {html.escape(names)}">{html.escape(short)}</sup>'
-
-
 def vehicle_tag(cls):
     return f'<span class="vt" title="{html.escape(VEHICLE_NAME[cls])}">{cls}</span>'
 
 
 def entry_class(entry):
-    """Vehicle class of a brigade entry; brygady.json from before fleet_type has none."""
-    return entry[2] if len(entry) > 2 else None
+    """Vehicle class of a brigade entry: (brigade, class_or_None)."""
+    return entry[1]
 
 
 def format_brigades(entries, by_class=False):
@@ -370,7 +362,7 @@ def format_brigades(entries, by_class=False):
         runs.setdefault(entry_class(e) if by_class else None, []).append(e)
     out = []
     for cls in sorted(runs, key=lambda c: list(VEHICLE_NAME).index(c) if c in VEHICLE_NAME else len(VEHICLE_NAME)):
-        text = ", ".join(html.escape(e[0]) + (marker(e[1]) if e[1] else "") for e in runs[cls])
+        text = ", ".join(html.escape(e[0]) for e in runs[cls])
         out.append(f"{vehicle_tag(cls)} {text}" if cls else text)
     return " ".join(out)
 
@@ -453,20 +445,23 @@ def build_html(payload):
         sole = None if by_class else next(iter(classes), None)
         line_tag = vehicle_tag(sole) if sole else ""
         rows = []
-        for group_key, title, _codes in DAY_GROUPS:
-            tag = (f'<span class="dt" title="{html.escape(title)}">'
-                   f'{html.escape(DAY_SHORT[group_key])}</span>')
-            depots = lines[line].get(group_key)
-            if not depots:
-                rows.append(f'<div class="day">{tag}<div class="none">—</div></div>')
-                continue
-            blocks = []
-            for label in sorted(depots, key=depot_sort):
-                blocks.append(
-                    f'<div class="g">{depot_badge(label, full_name)}'
-                    f'<span>{format_brigades(depots[label], by_class)}</span></div>'
-                )
-            rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
+        for group_key, _title, codes in DAY_GROUPS:
+            # The group's own row, or one per day type where the plan differs between them.
+            tags = [t for t in [DAY_SHORT[group_key]] + [CODE_SHORT[c] for c in codes]
+                    if t in lines[line]] or [DAY_SHORT[group_key]]
+            for t in tags:
+                tag = f'<span class="dt" title="{html.escape(ROW_TITLE[t])}">{html.escape(t)}</span>'
+                depots = lines[line].get(t)
+                if not depots:
+                    rows.append(f'<div class="day">{tag}<div class="none">—</div></div>')
+                    continue
+                blocks = []
+                for label in sorted(depots, key=depot_sort):
+                    blocks.append(
+                        f'<div class="g">{depot_badge(label, full_name)}'
+                        f'<span>{format_brigades(depots[label], by_class)}</span></div>'
+                    )
+                rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
         cards.append(
             f'<article class="card"><h2><a href="{html.escape(url)}" target="_blank" '
             f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a>{line_tag}</h2>'
@@ -511,10 +506,11 @@ def build_html(payload):
   .card h2 a {{ color: inherit; text-decoration: none; }}
   .card h2 a:hover {{ color: #06c; text-decoration: underline; }}
   .card h2 a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
-  .day {{ display: grid; grid-template-columns: 2.1em 1fr; align-items: start;
+  .day {{ display: grid; grid-template-columns: 4.2em 1fr; align-items: start;
     padding: 3px 0; }}
   .day + .day {{ border-top: 1px dashed #eee; }}
-  .dt {{ color: #999; font-size: 11px; font-weight: 600; line-height: 19px; cursor: help; }}
+  .dt {{ color: #999; font-size: 11px; font-weight: 600; line-height: 19px; cursor: help;
+    white-space: nowrap; }}
   .none {{ color: #bbb; line-height: 19px; }}
   .g {{ display: flex; align-items: baseline; margin: 1px 0; line-height: 1.5; }}
   .d {{ flex: none; display: inline-block; min-width: 3.4em; margin-right: 6px; padding: 0 6px;
@@ -523,7 +519,6 @@ def build_html(payload):
   .vt {{ display: inline-block; padding: 0 3px; border: 1px solid #ccc; border-radius: 3px;
     color: #777; font-size: 10px; font-weight: 600; line-height: 1.3; cursor: help; }}
   .card h2 .vt {{ margin-left: 6px; vertical-align: 2px; }}
-  .mk {{ color: #999; font-size: 9px; margin-left: 1px; }}
   .legend {{ margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }}
   .leg {{ display: inline-flex; align-items: center; gap: 5px; }}
   .sw {{ width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12);
@@ -548,7 +543,8 @@ def build_html(payload):
   <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.com.pl/viewtopic.php?t=11090">forum wawkom</a>
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
   <div class="legend">{''.join(legend)}</div>
-  <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta</div>
+  <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta ·
+    gdy plan linii różni się między dniami: <b>pon-czw</b>, <b>pt</b>, <b>sb</b>, <b>nd</b></div>
   <div class="sub">{vehicle_note}</div>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="cards">{''.join(cards)}</div>
@@ -558,7 +554,8 @@ def build_html(payload):
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
     kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
     Typ taboru (litera przy numerze linii lub przed brygadami) pochodzi z pola <code>fleet_type</code>.
-    Górny indeks przy numerze brygady oznacza, że kursuje ona tylko w części dni danego wiersza (DP lub DŚ).<br>
+    Wiersz DP (DŚ) oznacza, że plan linii jest taki sam od poniedziałku do piątku (w sobotę
+    i niedzielę); jeśli nie, każdy dzień ma osobny wiersz.<br>
     Dane: <a href="https://ztm.waw.pl">ZTM Warszawa</a> ·
     GTFS: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     kształty tras: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap (ODbL)</a>
