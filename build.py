@@ -540,7 +540,7 @@ def build_html(payload):
     najnowsza edycja w feedzie · bez linii L</div>
   <div class="sub">źródło: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     feed {html.escape(payload["feedVersion"] or "?")} · zaktualizowano {payload["generated"]}</div>
-  <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.com.pl/viewtopic.php?t=11090">forum wawkom</a>
+  <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.waw.pl/viewtopic.php?t=11090">forum wawkom</a>
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
   <div class="legend">{''.join(legend)}</div>
   <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta ·
