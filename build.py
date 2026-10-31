@@ -4,8 +4,9 @@
 """Render a one-page table of "which depot runs which brigade" for every WTP bus line.
 
 Reads the Warsaw GTFS at https://436.pl/gtfs/warsaw.zip, built by
-https://github.com/mccartney/WarsawGTFS, and, for the newest timetable of each day type
-the feed carries, reports the operating depot of every (line, brigade) pair.
+https://github.com/mccartney/WarsawGTFS, and, for each day from today to the feed's newest
+timetable edition, reports the operating depot of every (line, brigade) pair. Consecutive days with the same plan
+across the whole network share one entry in the page's day selector.
 
 The depot comes straight from `depot_id`, a non-standard column the feed adds to
 trips.txt. It names MZA's depots by an internal code — R-7(W) is Woronicza, R11(K)
@@ -29,6 +30,7 @@ import sys
 import urllib.parse
 import urllib.request
 import zipfile
+import zoneinfo
 from pathlib import Path
 
 FEED_URL = "https://436.pl/gtfs/warsaw.zip"
@@ -66,19 +68,22 @@ DEPOTS = {
     "KMŁ K-26": ("KMŁ", "Komunikacja Miejska Łomianki"),
 }
 
-# The two columns of the table, each merging the ZTM day-types it covers.
+TZ = zoneinfo.ZoneInfo("Europe/Warsaw")
+
+# The day groups the list of changes files each change under.
 DAY_GROUPS = [
     ("powszedni", "Dzień powszedni", ("PcS", "PtS")),
     ("swiateczny", "Sobota / niedziela i święta", ("SbS", "NdS")),
 ]
-# Row tag on the line cards for a group whose day types all share one plan.
 DAY_SHORT = {"powszedni": "DP", "swiateczny": "DŚ"}
-DAY_NAME = {"PcS": "pon.–czw.", "PtS": "piątek", "SbS": "sobota", "NdS": "niedziela"}
-# Row tag for a single day type, used where a line's plan differs within its group.
-CODE_SHORT = {"PcS": "pon-czw", "PtS": "pt", "SbS": "sb", "NdS": "nd"}
-ROW_TITLE = {"DP": "Dzień powszedni", "DŚ": "Sobota / niedziela i święta",
-             "pon-czw": "poniedziałek–czwartek", "pt": "piątek", "sb": "sobota",
-             "nd": "niedziela i święta"}
+
+WEEKDAY_SHORT = ["pon", "wt", "śr", "czw", "pt", "sob", "nd"]
+MONTH_GENITIVE = ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca",
+                  "sierpnia", "września", "października", "listopada", "grudnia"]
+# The ZTM day type each weekday normally runs. A date on another one is a holiday (NdS on
+# a weekday) or similar, and its selector entry says which timetable it runs.
+USUAL_CODE = ["PcS", "PcS", "PcS", "PcS", "PtS", "SbS", "NdS"]
+CODE_NAME = {"PcS": "powszedni", "PtS": "piątkowy", "SbS": "sobotni", "NdS": "świąteczny"}
 
 ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
 
@@ -172,21 +177,27 @@ def read_editions(feed):
     return editions
 
 
-def pick_days(editions):
-    """Newest edition of each day type: {code: (date, service_id)}."""
-    days = {}
-    for sid, (date, code) in editions.items():
-        if code not in days or date > days[code][0]:
-            days[code] = (date, sid)
-    return days
+def read_calendar(feed, editions, start):
+    """The bus edition running on each date from `start`: {date: service_id}.
 
-
-def newest_slots(slots, days):
-    """Narrow read_trips' per-edition slots (depots or vehicle classes) to the newest
-    edition of each day type, re-keyed by the day-type code: (code, line, brigade) -> value."""
-    newest = {sid: code for code, (_date, sid) in days.items()}
-    return {(newest[sid], line, brigade): depots
-            for (sid, line, brigade), depots in slots.items() if sid in newest}
+    Stops at the newest edition's date. The feed spells out its first week or so, one
+    edition per day, and then repeats those editions for weeks after; those later dates
+    are a guess that misses any timetable change ZTM has not published yet, so they are
+    left out. The feed has one bus service per date; should a date ever get two, the newer
+    edition wins.
+    """
+    end = max(date for date, _code in editions.values()) + datetime.timedelta(days=1)
+    calendar = {}
+    for r in feed.rows("calendar_dates"):
+        sid = r["service_id"]
+        if sid not in editions or r["exception_type"] != "1":
+            continue
+        d = r["date"]
+        date = datetime.date(int(d[:4]), int(d[4:6]), int(d[6:]))
+        if start <= date < end and (date not in calendar or
+                                    editions[sid][0] > editions[calendar[date]][0]):
+            calendar[date] = sid
+    return dict(sorted(calendar.items()))
 
 
 def find_changes(slots, editions):
@@ -279,44 +290,53 @@ def read_trips(feed, services):
     return pair_depots, fleet, unmapped
 
 
-def group_rows(pair_depots, fleet, services_by_code):
-    """Lay out each line's card rows.
+def day_plans(slots, fleet, calendar, editions):
+    """Number the network-wide plans of the calendar's days and lay out each line's card.
 
-    A group whose day types all run the same plan for the line (same brigades, depots and
-    vehicle classes) takes one row, "DP" or "DŚ". Otherwise each day type gets its own
-    row ("pon-czw" and "pt", "sb" and "nd"), an empty one where the line does not run that
-    day. Each day type shows its own newest edition, so nothing is merged across editions.
+    A plan is the whole network's {line: {brigade: (depot label, class)}}; two editions
+    with identical plans (the feed often repeats a weekday's) share a number, so equal
+    consecutive days can be merged into one selector entry.
 
-    Returns {line: {row_tag: {depot_label: [(brigade, class_or_None), ...]}}}.
+    Returns (days, lines): days is [{"date", "code", "plan"}] in date order; lines is
+    {line: [{"plans": [plan numbers], "depots": {depot label: [(brigade, class), ...]}}]},
+    one entry per distinct plan of the line. A plan the line is missing from is a day it
+    does not run.
     """
-    plans = {}  # line -> code -> {brigade: (depot label, class)}
-    for (code, line, brigade), depots in pair_depots.items():
-        plans.setdefault(line, {}).setdefault(code, {})[brigade] = (
-            depot_label(depots), fleet.get((code, line, brigade)))
+    by_sid = {}  # sid -> line -> {brigade: (depot label, class)}
+    for (sid, line, brigade), depots in slots.items():
+        by_sid.setdefault(sid, {}).setdefault(line, {})[brigade] = (
+            depot_label(depots), fleet.get((sid, line, brigade)))
+
+    def key(plan):
+        return repr(sorted((k, sorted(v.items())) for k, v in plan.items()))
+
+    numbers, plans, days = {}, [], []
+    for date, sid in calendar.items():
+        plan = by_sid.get(sid, {})
+        n = numbers.setdefault(key(plan), len(numbers))
+        if n == len(plans):
+            plans.append(plan)
+        days.append({"date": date.isoformat(), "code": editions[sid][1], "plan": n})
 
     out = {}
-    for line, by_code in plans.items():
-        rows = {}
-        for group_key, _title, codes in DAY_GROUPS:
-            live = [c for c in codes if c in services_by_code]
-            if not any(by_code.get(c) for c in live):
-                continue
-            if all(by_code.get(c) == by_code.get(live[0]) for c in live):
-                rows[DAY_SHORT[group_key]] = by_code[live[0]]
-            else:
-                for c in live:
-                    rows[CODE_SHORT[c]] = by_code.get(c, {})
-        out[line] = {}
-        for tag, plan in rows.items():
-            depots = {}
-            for brigade, (label, cls) in plan.items():
-                depots.setdefault(label, []).append((brigade, cls))
-            for brigades in depots.values():
-                brigades.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
-            out[line][tag] = {label: depots[label] for label in sorted(depots, key=depot_sort)}
+    for n, plan in enumerate(plans):
+        for line, brigades in plan.items():
+            variants = out.setdefault(line, {})
+            variants.setdefault(key({"": brigades}), (brigades, []))[1].append(n)
+    lines = {}
     # Sorted so the committed brygady.json diffs line by line between rebuilds; the feed
     # lists trips in no particular order.
-    return {line: out[line] for line in sorted(out, key=line_sort)}
+    for line in sorted(out, key=line_sort):
+        lines[line] = []
+        for brigades, numbers_ in out[line].values():
+            depots = {}
+            for brigade, (label, cls) in brigades.items():
+                depots.setdefault(label, []).append((brigade, cls))
+            for entries in depots.values():
+                entries.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
+            lines[line].append({"plans": numbers_,
+                                "depots": {label: depots[label] for label in sorted(depots, key=depot_sort)}})
+    return days, lines
 
 
 def depot_label(depots):
@@ -417,51 +437,88 @@ def build_changes(payload):
     return f"""<section>
     <h2 class="sec">Zmiany przydziału</h2>
     <div class="sub">Rozkłady w feedzie: {span}. Każdą edycję porównujemy z tym samym dniem
-      tygodnia tydzień wcześniej; karty powyżej pokazują stan po wszystkich zmianach.</div>
+      tygodnia tydzień wcześniej.</div>
     {body}
   </section>"""
 
 
+def runs(days):
+    """Consecutive days on the same plan: [(first, last, plan, [days])]."""
+    out = []
+    for day in days:
+        date = datetime.date.fromisoformat(day["date"])
+        if out and out[-1][2] == day["plan"] and out[-1][1] + datetime.timedelta(days=1) == date:
+            first, _last, plan, members = out[-1]
+            out[-1] = (first, date, plan, members + [day])
+        else:
+            out.append((date, date, day["plan"], [day]))
+    return out
+
+
+def run_label(first, last, members):
+    """'sob 31 października', 'wt–czw 3–5 listopada', 'pon–śr 30 listopada – 2 grudnia',
+    plus the timetable a holiday runs on."""
+    weekdays = WEEKDAY_SHORT[first.weekday()]
+    if last != first:
+        weekdays += "–" + WEEKDAY_SHORT[last.weekday()]
+    if first == last:
+        dates = f"{first.day} {MONTH_GENITIVE[first.month - 1]}"
+    elif first.month == last.month:
+        dates = f"{first.day}–{last.day} {MONTH_GENITIVE[first.month - 1]}"
+    else:
+        dates = (f"{first.day} {MONTH_GENITIVE[first.month - 1]} – "
+                 f"{last.day} {MONTH_GENITIVE[last.month - 1]}")
+    label = f"<b>{weekdays}</b> {dates}"
+    unusual = [d["code"] for d in members
+               if d["code"] != USUAL_CODE[datetime.date.fromisoformat(d["date"]).weekday()]]
+    if unusual:
+        label += f' <span class="hol">rozkład {CODE_NAME[unusual[0]]}</span>'
+    return label
+
+
 def build_html(payload):
     lines = payload["lines"]
-    services = payload["services"]
+    days = payload["days"]
     full_name = payload["depots"]
+    day_runs = runs(days)
+    n_plans = max(d["plan"] for d in days) + 1
+    # Rendered for the first day; the script switches to today's on load.
+    shown = day_runs[0][2]
 
-    counts = {}
-    for groups in lines.values():
-        for depots in groups.values():
-            for label, brigades in depots.items():
+    counts = {}  # depot -> [brigades in plan 0, plan 1, ...]
+    for variants in lines.values():
+        for v in variants:
+            for label, brigades in v["depots"].items():
                 for part in label.split(" / "):
-                    counts[part] = counts.get(part, 0) + len(brigades)
+                    per_plan = counts.setdefault(part, [0] * n_plans)
+                    for n in v["plans"]:
+                        per_plan[n] += len(brigades)
+
+    def plans_attr(numbers):
+        hidden = "" if shown in numbers else " hidden"
+        return f'data-p=" {" ".join(map(str, numbers))} "{hidden}'
 
     cards = []
     for line in sorted(lines, key=line_sort):
         url = ROUTE_URL.format(urllib.parse.quote(line.lower()))
+        variants = lines[line]
         # One class for the whole line goes next to its number; otherwise every brigade
         # list is split by class.
-        classes = {entry_class(e) for depots in lines[line].values()
-                   for brigades in depots.values() for e in brigades}
+        classes = {entry_class(e) for v in variants
+                   for brigades in v["depots"].values() for e in brigades}
         by_class = len(classes) > 1
         sole = None if by_class else next(iter(classes), None)
         line_tag = vehicle_tag(sole) if sole else ""
         rows = []
-        for group_key, _title, codes in DAY_GROUPS:
-            # The group's own row, or one per day type where the plan differs between them.
-            tags = [t for t in [DAY_SHORT[group_key]] + [CODE_SHORT[c] for c in codes]
-                    if t in lines[line]] or [DAY_SHORT[group_key]]
-            for t in tags:
-                tag = f'<span class="dt" title="{html.escape(ROW_TITLE[t])}">{html.escape(t)}</span>'
-                depots = lines[line].get(t)
-                if not depots:
-                    rows.append(f'<div class="day">{tag}<div class="none">—</div></div>')
-                    continue
-                blocks = []
-                for label in sorted(depots, key=depot_sort):
-                    blocks.append(
-                        f'<div class="g">{depot_badge(label, full_name)}'
-                        f'<span>{format_brigades(depots[label], by_class)}</span></div>'
-                    )
-                rows.append(f'<div class="day">{tag}<div>{"".join(blocks)}</div></div>')
+        for v in variants:
+            blocks = "".join(
+                f'<div class="g">{depot_badge(label, full_name)}'
+                f'<span>{format_brigades(v["depots"][label], by_class)}</span></div>'
+                for label in sorted(v["depots"], key=depot_sort))
+            rows.append(f'<div class="v" {plans_attr(v["plans"])}>{blocks}</div>')
+        idle = [n for n in range(n_plans) if not any(n in v["plans"] for v in variants)]
+        if idle:
+            rows.append(f'<div class="v none" {plans_attr(idle)}>nie kursuje</div>')
         cards.append(
             f'<article class="card"><h2><a href="{html.escape(url)}" target="_blank" '
             f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a>{line_tag}</h2>'
@@ -473,15 +530,22 @@ def build_html(payload):
         if label not in counts:
             continue
         full = full_name.get(label, label)
+        n = counts[label]
         legend.append(
-            f'<span class="leg"><span class="sw" style="background:{DEPOT_COLOR[label]}"></span>'
-            f'{html.escape(full)} <span class="cnt">{counts[label]}</span></span>'
+            f'<span class="leg" data-n="{" ".join(map(str, n))}"{"" if n[shown] else " hidden"}>'
+            f'<span class="sw" style="background:{DEPOT_COLOR[label]}"></span>'
+            f'{html.escape(full)} <span class="cnt">{n[shown]}</span></span>'
         )
 
+    selector = []
+    for i, (first, last, plan, members) in enumerate(day_runs):
+        selector.append(
+            f'<button type="button" data-p="{plan}" data-from="{first.isoformat()}" '
+            f'data-to="{last.isoformat()}" aria-pressed="{"true" if i == 0 else "false"}">'
+            f'{run_label(first, last, members)}</button>')
+
     vehicle_note = " · ".join(f"<b>{c}</b> — {html.escape(n)}" for c, n in VEHICLE_NAME.items())
-    day_note = " · ".join(
-        f"{DAY_NAME[c]} {services[c]['date']}" for _k, _t, codes in DAY_GROUPS for c in codes if c in services
-    )
+    span = f"{short_date(days[0]['date'])}–{short_date(days[-1]['date'])}"
 
     return f"""<!DOCTYPE html>
 <html lang="pl"><head><meta charset="utf-8">
@@ -506,12 +570,18 @@ def build_html(payload):
   .card h2 a {{ color: inherit; text-decoration: none; }}
   .card h2 a:hover {{ color: #06c; text-decoration: underline; }}
   .card h2 a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
-  .day {{ display: grid; grid-template-columns: 4.2em 1fr; align-items: start;
-    padding: 3px 0; }}
-  .day + .day {{ border-top: 1px dashed #eee; }}
-  .dt {{ color: #999; font-size: 11px; font-weight: 600; line-height: 19px; cursor: help;
-    white-space: nowrap; }}
+  .days {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }}
+  .days button {{ font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer;
+    border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }}
+  .days button:hover {{ border-color: #06c; }}
+  .days button[aria-pressed="true"] {{ background: #06c; border-color: #06c; color: #fff; }}
+  .days button.today::after {{ content: "dziś"; margin-left: 6px; font-size: 10px;
+    font-weight: 600; text-transform: uppercase; opacity: .7; }}
+  .hol {{ font-size: 11px; opacity: .75; }}
+  .v {{ padding: 2px 0; }}
+  .dt {{ color: #999; font-size: 11px; font-weight: 600; cursor: help; white-space: nowrap; }}
   .none {{ color: #bbb; line-height: 19px; }}
+  [hidden] {{ display: none !important; }}
   .g {{ display: flex; align-items: baseline; margin: 1px 0; line-height: 1.5; }}
   .d {{ flex: none; display: inline-block; min-width: 3.4em; margin-right: 6px; padding: 0 6px;
     border-radius: 4px; font-size: 11px; font-weight: 600; text-align: center;
@@ -536,16 +606,14 @@ def build_html(payload):
   <header class="h436"><a href="https://436.pl/"><img src="https://436.pl/436.png" alt="436"
     width="480" height="289">.pl/</a><span>przydzial-brygad/</span></header>
   <h1>Przydział brygad — zakłady i przewoźnicy WTP</h1>
-  <div class="sub">{len(lines)} linii autobusowych · rozkład: {html.escape(day_note)} —
-    najnowsza edycja w feedzie · bez linii L</div>
+  <div class="sub">{len(lines)} linii autobusowych · rozkłady na dni {span} · bez linii L</div>
   <div class="sub">źródło: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     feed {html.escape(payload["feedVersion"] or "?")} · zaktualizowano {payload["generated"]}</div>
   <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.waw.pl/viewtopic.php?t=11090">forum wawkom</a>
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
   <div class="legend">{''.join(legend)}</div>
-  <div class="sub"><b>DP</b> — dzień powszedni · <b>DŚ</b> — sobota / niedziela i święta ·
-    gdy plan linii różni się między dniami: <b>pon-czw</b>, <b>pt</b>, <b>sb</b>, <b>nd</b></div>
   <div class="sub">{vehicle_note}</div>
+  <nav class="days" aria-label="Dzień">{''.join(selector)}</nav>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="cards">{''.join(cards)}</div>
   {build_changes(payload)}
@@ -554,30 +622,60 @@ def build_html(payload):
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
     kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
     Typ taboru (litera przy numerze linii lub przed brygadami) pochodzi z pola <code>fleet_type</code>.
-    Wiersz DP (DŚ) oznacza, że plan linii jest taki sam od poniedziałku do piątku (w sobotę
-    i niedzielę); jeśli nie, każdy dzień ma osobny wiersz.<br>
+    Kolejne dni z identycznym przydziałem w całej sieci są połączone w jeden przycisk;
+    domyślnie wybrany jest dzisiejszy dzień.<br>
     Dane: <a href="https://ztm.waw.pl">ZTM Warszawa</a> ·
     GTFS: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     kształty tras: <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap (ODbL)</a>
   </div>
 <script>
   const q = document.getElementById('q');
-  const cards = [...document.querySelectorAll('.card, .changes li')];
-  q.addEventListener('input', () => {{
+  const cards = [...document.querySelectorAll('.card')];
+  const changes = [...document.querySelectorAll('.changes li')];
+  const buttons = [...document.querySelectorAll('.days button')];
+  const legend = [...document.querySelectorAll('.leg')];
+  let plan = buttons[0].dataset.p;
+  const filter = () => {{
     const t = q.value.trim().toLowerCase();
-    for (const c of cards) c.hidden = t && !c.textContent.toLowerCase().includes(t);
-  }});
+    // Match a card on its number and the selected day's row only.
+    for (const c of cards) c.hidden = t && ![c.querySelector('h2'), ...c.querySelectorAll('.v')]
+      .some(e => !e.hidden && e.textContent.toLowerCase().includes(t));
+    for (const c of changes) c.hidden = t && !c.textContent.toLowerCase().includes(t);
+  }};
+  const select = b => {{
+    plan = b.dataset.p;
+    for (const o of buttons) o.setAttribute('aria-pressed', o === b);
+    for (const v of document.querySelectorAll('.v')) v.hidden = !v.dataset.p.includes(` ${{plan}} `);
+    for (const l of legend) {{
+      const n = l.dataset.n.split(' ')[plan];
+      l.querySelector('.cnt').textContent = n;
+      l.hidden = n === '0';
+    }}
+    filter();
+  }};
+  // Today in Warsaw as YYYY-MM-DD. Days already past are dropped, unless the page is so
+  // stale that nothing else is left.
+  const today = new Date().toLocaleDateString('sv-SE', {{timeZone: 'Europe/Warsaw'}});
+  for (const b of buttons) {{
+    b.hidden = b.dataset.to < today;
+    b.classList.toggle('today', b.dataset.from <= today && today <= b.dataset.to);
+    b.addEventListener('click', () => select(b));
+  }}
+  const live = buttons.filter(b => !b.hidden);
+  if (!live.length) buttons.at(-1).hidden = false;
+  select(live[0] || buttons.at(-1));
+  q.addEventListener('input', filter);
 </script>
 </body></html>
 """
 
 
 def coverage(payload):
-    """Share of (line, group, brigade) slots that got a real depot, not 'nieznany'."""
+    """Share of (line, plan variant, brigade) slots that got a real depot, not 'nieznany'."""
     total = known = 0
-    for groups in payload["lines"].values():
-        for depots in groups.values():
-            for label, brigades in depots.items():
+    for variants in payload["lines"].values():
+        for v in variants:
+            for label, brigades in v["depots"].items():
                 total += len(brigades)
                 if label != UNKNOWN:
                     known += len(brigades)
@@ -585,7 +683,8 @@ def coverage(payload):
 
 
 def usable(payload):
-    return payload and len(payload.get("lines", {})) >= MIN_LINES and coverage(payload) >= MIN_COVERAGE
+    return (payload and payload.get("days") and len(payload.get("lines", {})) >= MIN_LINES
+            and coverage(payload) >= MIN_COVERAGE)
 
 
 def main():
@@ -600,29 +699,28 @@ def main():
     version = feed.version()
 
     editions = read_editions(feed)
-    days = pick_days(editions)
+    today = datetime.datetime.now(TZ).date()
+    calendar = read_calendar(feed, editions, today)
     print(f"feed_version: {version} · {len(editions)} editions", file=sys.stderr)
-    for code, (date, sid) in sorted(days.items()):
-        print(f"  {DAY_NAME[code]:<10} {sid}", file=sys.stderr)
 
     slots, fleet, unmapped = read_trips(feed, editions)
-    pair_depots = newest_slots(slots, days)
+    days, lines = day_plans(slots, fleet, calendar, editions)
+    for day in days:
+        print(f"  {day['date']} {calendar[datetime.date.fromisoformat(day['date'])]} "
+              f"plan {day['plan']}", file=sys.stderr)
     changes = find_changes(slots, editions)
-    print(f"{len(pair_depots)} (day, line, brigade) slots · {len(changes)} changes", file=sys.stderr)
+    print(f"{len(slots)} (edition, line, brigade) slots · {len(changes)} changes", file=sys.stderr)
     for depot, n in sorted(unmapped.items(), key=lambda kv: -kv[1]):
         print(f"  WARNING: depot_id {depot!r} not in DEPOTS ({n} trips)", file=sys.stderr)
 
     payload = {
         "generated": f"{datetime.datetime.now(datetime.timezone.utc):%Y-%m-%d}",
         "feedVersion": version,
-        # In column order, not pick_days' order: that walks a set, which Python's string
-        # hashing reshuffles on every run.
-        "services": {code: {"date": days[code][0].isoformat()}
-                     for _k, _t, codes in DAY_GROUPS for code in codes if code in days},
         "depots": dict(sorted(DEPOT_FULL.items())),
-        "lines": group_rows(pair_depots, newest_slots(fleet, days), days),
-        # Dated depot changes across the editions, for the list under the cards; the
-        # cards themselves show the newest edition, i.e. the state after all of these.
+        # Today to the newest edition, each day pointing at its network-wide plan by number.
+        "days": days,
+        "lines": lines,
+        # Dated depot changes across the editions, for the list under the cards.
         "editions": sorted({date.isoformat() for date, _code in editions.values()}),
         "changes": changes,
     }

@@ -2,16 +2,21 @@
 
 https://436.pl/przydzial-brygad/ (także https://mccartney.github.io/przydzial-brygad/)
 
-Codziennie budowana strona: jedna tabela, wiersz na linię autobusową, kolumny **Dzień
-powszedni** i **Sobota / niedziela i święta**, a w komórce brygady pogrupowane po
+Codziennie budowana strona: karta na linię autobusową, a w niej brygady pogrupowane po
 obsługującym je zakładzie (`R-1: 1, 5, 8, 10, 13, 14, 017 · R-2: 2, 3, 4, 6, 7, …`).
 Bez linii lokalnych `L-*`.
+
+Nad kartami wybór dnia, domyślnie dziś. Obejmuje dni od dziś do najnowszej edycji rozkładu
+w feedzie (ok. tygodnia) — dalsze daty feed tylko powtarza z poprzednich tygodni, więc ich
+nie pokazujemy. Kolejne dni z identycznym przydziałem w całej sieci są złączone w jeden
+przycisk, np. `wt–czw 3–5 listopada`; święto w dzień roboczy jest oznaczone
+(`śr 11 listopada rozkład świąteczny`).
 
 Pod kartami lista zmian przydziału w horyzoncie feedu (ok. tygodnia do przodu), np.
 `116/01 DP od 12.10: R-1 → R-2` albo `116/M6 DŚ od 10.10: likwidacja`. Każda edycja
 rozkładu jest porównywana z tym samym dniem tygodnia tydzień wcześniej (żeby brygada
 kursująca np. tylko w czwartki nie „znikała” co tydzień), a zmiana datowana od pierwszego
-dnia, od którego nowy stan obowiązuje bez przerwy. Karty pokazują stan po wszystkich zmianach.
+dnia, od którego nowy stan obowiązuje bez przerwy.
 
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
 MZA, jak i przewoźników kontraktowych (Mobilis, PKS Grodzisk, Relobus, KMŁ).
