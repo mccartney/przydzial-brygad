@@ -5,11 +5,11 @@
     "KMŁ": "Komunikacja Miejska Łomianki",
     "Mobilis": "Mobilis",
     "PKS Grodzisk": "PKS Grodzisk Mazowiecki",
-    "R-1": "R-1 Woronicza",
-    "R-2": "R-2 Kleszczowa",
-    "R-3": "R-3 Ostrobramska",
-    "R-4": "R-4 Stalowa",
-    "R-6": "R-6 Płochocińska",
+    "R-1": "R-1 Woronicza (dawne R-7)",
+    "R-2": "R-2 Kleszczowa (dawne R-11)",
+    "R-3": "R-3 Ostrobramska (dawne R-10)",
+    "R-4": "R-4 Stalowa (dawne R-13)",
+    "R-6": "R-6 Płochocińska (dawne R-14)",
     "Relobus": "Relobus"
   },
   "days": [

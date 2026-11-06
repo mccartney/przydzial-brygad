@@ -54,11 +54,11 @@ LOCAL_LINE = re.compile(r"^L-?\d+$")
 # collapse to one label each, since the table answers who runs a brigade, not from which
 # of an operator's yards. Several lines mix an operator's depots.
 DEPOTS = {
-    "R-7(W)": ("R-1", "R-1 Woronicza"),
-    "R11(K)": ("R-2", "R-2 Kleszczowa"),
-    "R10(O)": ("R-3", "R-3 Ostrobramska"),
-    "R13(S)": ("R-4", "R-4 Stalowa"),
-    "R14(P)": ("R-6", "R-6 Płochocińska"),
+    "R-7(W)": ("R-1", "R-1 Woronicza (dawne R-7)"),
+    "R11(K)": ("R-2", "R-2 Kleszczowa (dawne R-11)"),
+    "R10(O)": ("R-3", "R-3 Ostrobramska (dawne R-10)"),
+    "R13(S)": ("R-4", "R-4 Stalowa (dawne R-13)"),
+    "R14(P)": ("R-6", "R-6 Płochocińska (dawne R-14)"),
     "Mob12": ("Mobilis", "Mobilis"),
     "Mob88": ("Mobilis", "Mobilis"),
     "PKS_A82": ("PKS Grodzisk", "PKS Grodzisk Mazowiecki"),
