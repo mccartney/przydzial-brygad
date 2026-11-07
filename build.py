@@ -92,11 +92,11 @@ ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
 VEHICLE_CLASS = re.compile(r"^([KMLGH])-")
 # Smallest first, the order a mixed line lists its classes in.
 VEHICLE_NAME = {
-    "K": "mini 8–10 m",
-    "M": "12 m",
-    "L": "12 m elektryczny",
-    "G": "przegubowy 18 m",
-    "H": "przegubowy elektryczny",
+    "K": "midi, 8–10 m",
+    "M": "maxi, 12 m",
+    "L": "elektryczny maxi, 12 m",
+    "G": "przegubowy mega, 18 m",
+    "H": "elektryczny przegubowy mega, 18 m",
 }
 
 UNKNOWN = "nieznany"
