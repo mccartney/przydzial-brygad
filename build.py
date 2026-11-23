@@ -50,7 +50,7 @@ LOCAL_LINE = re.compile(r"^L-?\d+$")
 # to the R-n numbering ZTM and MZA use in public. Verified against the depot stops the
 # trips of each code actually terminate at.
 #
-# The contracted operators get a code per depot (Mob12/Mob88, Relobus29/38/49); those
+# The contracted operators get a code per depot (Mob12/Mob88, Relobus29/38/49/58); those
 # collapse to one label each, since the table answers who runs a brigade, not from which
 # of an operator's yards. Several lines mix an operator's depots.
 DEPOTS = {
@@ -65,6 +65,7 @@ DEPOTS = {
     "Relobus29": ("Relobus", "Relobus"),
     "Relobus38": ("Relobus", "Relobus"),
     "Relobus49": ("Relobus", "Relobus"),
+    "Relobus58": ("Relobus", "Relobus"),
     "KMŁ K-26": ("KMŁ", "Komunikacja Miejska Łomianki"),
 }
 
