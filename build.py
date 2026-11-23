@@ -69,6 +69,20 @@ DEPOTS = {
     "KMŁ K-26": ("KMŁ", "Komunikacja Miejska Łomianki"),
 }
 
+# Operators that run several contracts, one depot_id per contract. The table files them
+# under the operator, as above; picking the operator in the legend splits its rows per
+# contract. Labelled by the code's number, since the feed names nothing else. Colours
+# are shades of the operator's own.
+CONTRACTS = {
+    "Mob12": ("Mobilis 12", "#ffe3b0"),
+    "Mob88": ("Mobilis 88", "#f6c879"),
+    "Relobus29": ("Relobus 29", "#e8f4d3"),
+    "Relobus38": ("Relobus 38", "#d2e8ae"),
+    "Relobus49": ("Relobus 49", "#b7d98a"),
+    "Relobus58": ("Relobus 58", "#9cc768"),
+}
+CONTRACT_COLOR = dict(CONTRACTS.values())
+
 TZ = zoneinfo.ZoneInfo("Europe/Warsaw")
 
 # The day groups the list of changes files each change under.
@@ -254,7 +268,8 @@ def read_trips(feed, services):
     """One pass over trips.txt: (service_id, line, brigade) -> set of depot labels.
 
     Returns that alongside the same slots' vehicle class letter (left out where fleet_type
-    is missing) and a count of depot_id values missing from DEPOTS, so a renamed or newly
+    is missing), their contracts (set of CONTRACTS labels, only for the operators listed
+    there) and a count of depot_id values missing from DEPOTS, so a renamed or newly
     added operator shows up in the log instead of quietly becoming "nieznany".
     """
     bus_lines = {}
@@ -264,6 +279,7 @@ def read_trips(feed, services):
 
     pair_depots = {}
     fleet = {}
+    contracts = {}
     unmapped = {}
     for t in feed.rows("trips"):
         sid = t["service_id"]
@@ -284,29 +300,34 @@ def read_trips(feed, services):
         slot = pair_depots.setdefault((sid, line, brigade), set())
         if label:
             slot.add(label)
+        if depot in CONTRACTS:
+            contracts.setdefault((sid, line, brigade), set()).add(CONTRACTS[depot][0])
         # A brigade runs one vehicle all day, so every trip of it carries the same class.
         cls = VEHICLE_CLASS.match(t.get("fleet_type") or "")
         if cls:
             fleet[(sid, line, brigade)] = cls[1]
-    return pair_depots, fleet, unmapped
+    return pair_depots, fleet, contracts, unmapped
 
 
-def day_plans(slots, fleet, calendar, editions):
+def day_plans(slots, fleet, contracts, calendar, editions):
     """Number the network-wide plans of the calendar's days and lay out each line's card.
 
-    A plan is the whole network's {line: {brigade: (depot label, class)}}; two editions
-    with identical plans (the feed often repeats a weekday's) share a number, so equal
-    consecutive days can be merged into one selector entry.
+    A plan is the whole network's {line: {brigade: (depot label, class, contract)}}; two
+    editions with identical plans (the feed often repeats a weekday's) share a number, so
+    equal consecutive days can be merged into one selector entry. The contract counts too:
+    days that differ only in it must not share the card rows that spell it out.
 
     Returns (days, lines): days is [{"date", "code", "plan"}] in date order; lines is
-    {line: [{"plans": [plan numbers], "depots": {depot label: [(brigade, class), ...]}}]},
+    {line: [{"plans": [plan numbers],
+             "depots": {depot label: [(brigade, class, contract), ...]}}]},
     one entry per distinct plan of the line. A plan the line is missing from is a day it
     does not run.
     """
     by_sid = {}  # sid -> line -> {brigade: (depot label, class)}
     for (sid, line, brigade), depots in slots.items():
+        contract = " / ".join(sorted(contracts.get((sid, line, brigade), ()))) or None
         by_sid.setdefault(sid, {}).setdefault(line, {})[brigade] = (
-            depot_label(depots), fleet.get((sid, line, brigade)))
+            depot_label(depots), fleet.get((sid, line, brigade)), contract)
 
     def key(plan):
         return repr(sorted((k, sorted(v.items())) for k, v in plan.items()))
@@ -331,8 +352,8 @@ def day_plans(slots, fleet, calendar, editions):
         lines[line] = []
         for brigades, numbers_ in out[line].values():
             depots = {}
-            for brigade, (label, cls) in brigades.items():
-                depots.setdefault(label, []).append((brigade, cls))
+            for brigade, (label, cls, contract) in brigades.items():
+                depots.setdefault(label, []).append((brigade, cls, contract))
             for entries in depots.values():
                 entries.sort(key=lambda e: brigade_sort(e[0]) + (e[0],))
             lines[line].append({"plans": numbers_,
@@ -368,8 +389,26 @@ def vehicle_tag(cls):
 
 
 def entry_class(entry):
-    """Vehicle class of a brigade entry: (brigade, class_or_None)."""
+    """Vehicle class of a brigade entry: (brigade, class_or_None, contract_or_None)."""
     return entry[1]
+
+
+def entry_contract(entry):
+    # brygady.json files from before contracts were tracked have two-element entries.
+    return entry[2] if len(entry) > 2 else None
+
+
+def operators_attr(label):
+    """data-o for an element: '|R-2|Relobus|'. Pipes, as labels contain spaces."""
+    return html.escape("|" + "|".join(label.split(" / ")) + "|")
+
+
+def contract_label(label, contract):
+    """The depot label with each operator spelled out per contract:
+    ('Relobus', 'Relobus 38') -> 'Relobus 38', ('R-2 / Relobus', ...) -> 'R-2 / Relobus 38'."""
+    names = contract.split(" / ")
+    return " / ".join(" / ".join(n for n in names if n.startswith(part + " ")) or part
+                      for part in label.split(" / "))
 
 
 def format_brigades(entries, by_class=False):
@@ -388,10 +427,10 @@ def format_brigades(entries, by_class=False):
     return " ".join(out)
 
 
-def depot_badge(label, full_name):
+def depot_badge(label, full_name, color=None):
     # A brigade split across two depots keeps the first one's colour, so it never reads
     # as grey "nieznany".
-    color = DEPOT_COLOR.get(label.split(" / ")[0], DEPOT_COLOR[UNKNOWN])
+    color = color or DEPOT_COLOR.get(label.split(" / ")[0], DEPOT_COLOR[UNKNOWN])
     tip = html.escape(full_name.get(label, label))
     return f'<span class="d" style="background:{color}" title="{tip}">{html.escape(label)}</span>'
 
@@ -419,6 +458,7 @@ def build_changes(payload):
         line_sort(kv[0][1]), kv[0][0], group_order.index(kv[0][2]), brigade_sort(kv[1][0]) + (kv[1][0],)))
     items = []
     for (date, line, group, old, new), brigades in rows:
+        old_label, new_label = old, new
         old = old and depot_badge(old, full_name)
         new = new and depot_badge(new, full_name)
         if old and new:
@@ -427,8 +467,9 @@ def build_changes(payload):
             what = f"nowa brygada {new}"
         else:
             what = f"likwidacja <span class=\"was\">(było {old})</span>"
+        ops = "|".join(p for label in (old_label, new_label) if label for p in label.split(" / "))
         items.append(
-            f'<li><b>{html.escape(line)}/{html.escape(", ".join(brigades))}</b> '
+            f'<li data-o="|{html.escape(ops)}|"><b>{html.escape(line)}/{html.escape(", ".join(brigades))}</b> '
             f'<span class="dt" title="{html.escape(dict((k, t) for k, t, _ in DAY_GROUPS)[group])}">'
             f'{DAY_SHORT[group]}</span> od {short_date(date)}: {what}</li>'
         )
@@ -512,11 +553,29 @@ def build_html(payload):
         line_tag = vehicle_tag(sole) if sole else ""
         rows = []
         for v in variants:
-            blocks = "".join(
-                f'<div class="g">{depot_badge(label, full_name)}'
-                f'<span>{format_brigades(v["depots"][label], by_class)}</span></div>'
-                for label in sorted(v["depots"], key=depot_sort))
-            rows.append(f'<div class="v" {plans_attr(v["plans"])}>{blocks}</div>')
+            blocks = []
+            for label in sorted(v["depots"], key=depot_sort):
+                entries = v["depots"][label]
+                ops = operators_attr(label)
+                per_contract = {}
+                for e in entries:
+                    per_contract.setdefault(entry_contract(e), []).append(e)
+                split = any(per_contract)
+                blocks.append(
+                    f'<div class="g{" has-k" if split else ""}" data-o="{ops}">'
+                    f'{depot_badge(label, full_name)}'
+                    f'<span>{format_brigades(entries, by_class)}</span></div>')
+                if not split:
+                    continue
+                # Shown instead of the row above while its operator is picked in the legend.
+                for contract in sorted(per_contract, key=lambda c: c or ""):
+                    name = contract_label(label, contract) if contract else label
+                    color = CONTRACT_COLOR.get(name.split(" / ")[0])
+                    blocks.append(
+                        f'<div class="g k" data-o="{ops}" hidden>'
+                        f'{depot_badge(name, full_name, color)}'
+                        f'<span>{format_brigades(per_contract[contract], by_class)}</span></div>')
+            rows.append(f'<div class="v" {plans_attr(v["plans"])}>{"".join(blocks)}</div>')
         idle = [n for n in range(n_plans) if not any(n in v["plans"] for v in variants)]
         if idle:
             rows.append(f'<div class="v none" {plans_attr(idle)}>nie kursuje</div>')
@@ -533,10 +592,12 @@ def build_html(payload):
         full = full_name.get(label, label)
         n = counts[label]
         legend.append(
-            f'<span class="leg" data-n="{" ".join(map(str, n))}"{"" if n[shown] else " hidden"}>'
+            f'<button type="button" class="leg" data-o="{html.escape(label)}" aria-pressed="false" '
+            f'data-n="{" ".join(map(str, n))}"{"" if n[shown] else " hidden"}>'
             f'<span class="sw" style="background:{DEPOT_COLOR[label]}"></span>'
-            f'{html.escape(full)} <span class="cnt">{n[shown]}</span></span>'
+            f'{html.escape(full)} <span class="cnt">{n[shown]}</span></button>'
         )
+    split_ops = sorted({name.rsplit(" ", 1)[0] for name in CONTRACT_COLOR}, key=depot_sort)
 
     selector = []
     for i, (first, last, plan, members) in enumerate(day_runs):
@@ -591,7 +652,12 @@ def build_html(payload):
     color: #777; font-size: 10px; font-weight: 600; line-height: 1.3; cursor: help; }}
   .card h2 .vt {{ margin-left: 6px; vertical-align: 2px; }}
   .legend {{ margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; }}
-  .leg {{ display: inline-flex; align-items: center; gap: 5px; }}
+  .leg {{ display: inline-flex; align-items: center; gap: 5px; font: inherit; color: inherit;
+    padding: 2px 6px; margin: -2px -6px; border: 1px solid transparent; border-radius: 5px;
+    background: none; cursor: pointer; }}
+  .leg:hover {{ border-color: #ccc; }}
+  .leg[aria-pressed="true"] {{ border-color: #06c; background: #eef4ff; }}
+  .legend.on .leg[aria-pressed="false"] {{ opacity: .45; }}
   .sw {{ width: 13px; height: 13px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.12);
     display: inline-block; }}
   .cnt {{ color: #999; }}
@@ -613,6 +679,8 @@ def build_html(payload):
   <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.waw.pl/viewtopic.php?t=11090">forum wawkom</a>
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
   <div class="legend">{''.join(legend)}</div>
+  <div class="sub">Kliknij zakład lub przewoźnika, by pokazać tylko jego brygady;
+    {' i '.join(html.escape(o) for o in split_ops)} — z podziałem na umowy (numer kodu z feedu).</div>
   <div class="sub">{vehicle_note}</div>
   <nav class="days" aria-label="Dzień">{''.join(selector)}</nav>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
@@ -621,7 +689,9 @@ def build_html(payload):
   <div class="foot">
     Zakład bierzemy wprost z pola <code>depot_id</code>, które feed GTFS dokłada do
     <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
-    kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola.
+    kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola. Mobilis i Relobus
+    mają po kilka kodów, po jednym na umowę; po wybraniu przewoźnika w legendzie brygady są
+    rozpisane na te kody (np. <code>Relobus38</code> → „Relobus 38”).
     Typ taboru (litera przy numerze linii lub przed brygadami) pochodzi z pola <code>fleet_type</code>.
     Kolejne dni z identycznym przydziałem w całej sieci są połączone w jeden przycisk;
     domyślnie wybrany jest dzisiejszy dzień.<br>
@@ -635,14 +705,34 @@ def build_html(payload):
   const changes = [...document.querySelectorAll('.changes li')];
   const buttons = [...document.querySelectorAll('.days button')];
   const legend = [...document.querySelectorAll('.leg')];
+  const legendBox = document.querySelector('.legend');
   let plan = buttons[0].dataset.p;
+  let op = '';  // the depot or operator picked in the legend, '' for all
+  const mine = e => !op || e.dataset.o.includes(`|${{op}}|`);
   const filter = () => {{
     const t = q.value.trim().toLowerCase();
-    // Match a card on its number and the selected day's row only.
-    for (const c of cards) c.hidden = t && ![c.querySelector('h2'), ...c.querySelectorAll('.v')]
-      .some(e => !e.hidden && e.textContent.toLowerCase().includes(t));
-    for (const c of changes) c.hidden = t && !c.textContent.toLowerCase().includes(t);
+    for (const c of cards) {{
+      // With an operator picked, only its rows stay, those with contracts split per contract.
+      for (const g of c.querySelectorAll('.g')) {{
+        g.hidden = !mine(g) || (g.classList.contains('k') ? !op : !!op && g.classList.contains('has-k'));
+      }}
+      // Match a card on its number and the selected day's visible rows only.
+      const rows = [...c.querySelectorAll('.v')].filter(v => !v.hidden);
+      const shown = rows.flatMap(v => v.classList.contains('none') ? [v] : [...v.querySelectorAll('.g')]
+        .filter(g => !g.hidden));
+      c.hidden = (op && !shown.some(e => e.classList.contains('g'))) || (t &&
+        ![c.querySelector('h2'), ...shown].some(e => e.textContent.toLowerCase().includes(t)));
+    }}
+    for (const c of changes) c.hidden = !mine(c) || (t && !c.textContent.toLowerCase().includes(t));
   }};
+  const pick = o => {{
+    op = o;
+    for (const l of legend) l.setAttribute('aria-pressed', l.dataset.o === op);
+    legendBox.classList.toggle('on', !!op);
+    history.replaceState(null, '', op ? '#' + encodeURIComponent(op) : location.pathname + location.search);
+    filter();
+  }};
+  for (const l of legend) l.addEventListener('click', () => pick(op === l.dataset.o ? '' : l.dataset.o));
   const select = b => {{
     plan = b.dataset.p;
     for (const o of buttons) o.setAttribute('aria-pressed', o === b);
@@ -651,6 +741,7 @@ def build_html(payload):
       const n = l.dataset.n.split(' ')[plan];
       l.querySelector('.cnt').textContent = n;
       l.hidden = n === '0';
+      if (l.hidden && l.dataset.o === op) pick('');
     }}
     filter();
   }};
@@ -662,6 +753,9 @@ def build_html(payload):
     b.classList.toggle('today', b.dataset.from <= today && today <= b.dataset.to);
     b.addEventListener('click', () => select(b));
   }}
+  let fromHash = '';
+  try {{ fromHash = decodeURIComponent(location.hash.slice(1)); }} catch (e) {{}}
+  if (legend.some(l => l.dataset.o === fromHash)) pick(fromHash);
   const live = buttons.filter(b => !b.hidden);
   if (!live.length) buttons.at(-1).hidden = false;
   select(live[0] || buttons.at(-1));
@@ -704,8 +798,8 @@ def main():
     calendar = read_calendar(feed, editions, today)
     print(f"feed_version: {version} · {len(editions)} editions", file=sys.stderr)
 
-    slots, fleet, unmapped = read_trips(feed, editions)
-    days, lines = day_plans(slots, fleet, calendar, editions)
+    slots, fleet, contracts, unmapped = read_trips(feed, editions)
+    days, lines = day_plans(slots, fleet, contracts, calendar, editions)
     for day in days:
         print(f"  {day['date']} {calendar[datetime.date.fromisoformat(day['date'])]} "
               f"plan {day['plan']}", file=sys.stderr)

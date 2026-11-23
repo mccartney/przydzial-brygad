@@ -21,6 +21,12 @@ dnia, od którego nowy stan obowiązuje bez przerwy.
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
 MZA, jak i przewoźników kontraktowych (Mobilis, PKS Grodzisk, Relobus, KMŁ).
 
+Pozycje legendy są klikalne: wybór zakładu lub przewoźnika zostawia tylko jego brygady
+(karty i lista zmian; da się go podlinkować, np. `#Relobus`). Mobilis i Relobus mają po
+kilka kodów `depot_id`, po jednym na umowę (`Mob12`, `Mob88`, `Relobus29/38/49/58`); po
+wybraniu przewoźnika jego brygady w kartach są rozpisane na te kody, np. `Relobus 38` /
+`Relobus 58`. Lista zmian zostaje na poziomie przewoźnika.
+
 `python3 build.py` buduje `przydzial.html` (publikowany jako `index.html`) oraz
 `brygady.json` — maszynowy zrzut, jednocześnie awaryjne źródło, gdyby świeży feed okazał
 się zepsuty. Bez zależności, sama biblioteka standardowa.
