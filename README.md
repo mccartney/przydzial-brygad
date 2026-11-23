@@ -16,7 +16,10 @@ Pod kartami lista zmian przydziału w horyzoncie feedu (ok. tygodnia do przodu),
 `116/01 DP od 12.10: R-1 → R-2` albo `116/M6 DŚ od 10.10: likwidacja`. Każda edycja
 rozkładu jest porównywana z tym samym dniem tygodnia tydzień wcześniej (żeby brygada
 kursująca np. tylko w czwartki nie „znikała” co tydzień), a zmiana datowana od pierwszego
-dnia, od którego nowy stan obowiązuje bez przerwy.
+dnia, od którego nowy stan obowiązuje bez przerwy. Lista ma dwie zakładki: **wg linii** (jak
+wyżej) i **wg zakładu / przewoźnika** — blok na każdy zakład lub przewoźnika z tym, co
+przejmuje (`116/01 DP od 12.10: z R-1`) i co oddaje (`… do R-2`, `likwidacja`); zmiana między
+dwoma zakładami pojawia się w obu blokach.
 
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
 MZA, jak i przewoźników kontraktowych (Mobilis, PKS Grodzisk, Relobus, KMŁ).

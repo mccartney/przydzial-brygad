@@ -442,13 +442,18 @@ def short_date(iso):
 
 
 def build_changes(payload):
-    """The list under the cards: '116/01, 03 DP od 12.10: R-1 → R-2', one item per line,
-    day group, date and kind of change, with all the brigades it hits."""
+    """The list under the cards, in two tabs over the same changes.
+
+    By line: '116/01, 03 DP od 12.10: R-1 → R-2', one item per line, day group, date and
+    kind of change, with all the brigades it hits. By operator: a block per depot or
+    operator, listing what it takes over ('116/01, 03 DP od 12.10: z R-1') and what it
+    gives up ('… do R-2'), so a change between two of them shows in both blocks."""
     changes = payload.get("changes")
     editions = payload.get("editions")
     if changes is None or not editions:
         return ""
     full_name = payload["depots"]
+    group_name = {k: t for k, t, _ in DAY_GROUPS}
     # Changes come sorted by date, line, brigade, so each group's brigades come out sorted.
     grouped = {}
     for c in changes:
@@ -456,30 +461,69 @@ def build_changes(payload):
     group_order = [k for k, _t, _codes in DAY_GROUPS]
     rows = sorted(grouped.items(), key=lambda kv: (
         line_sort(kv[0][1]), kv[0][0], group_order.index(kv[0][2]), brigade_sort(kv[1][0]) + (kv[1][0],)))
-    items = []
+
+    def item(ops, date, line, group, brigades, what):
+        return (f'<li data-o="|{html.escape("|".join(ops))}|"><b>{html.escape(line)}/'
+                f'{html.escape(", ".join(brigades))}</b> '
+                f'<span class="dt" title="{html.escape(group_name[group])}">{DAY_SHORT[group]}</span> '
+                f'od {short_date(date)}: {what}</li>')
+
+    by_line = []
+    # operator -> ([items it takes over], [items it gives up], brigades in, brigades out)
+    by_op = {}
     for (date, line, group, old, new), brigades in rows:
-        old_label, new_label = old, new
-        old = old and depot_badge(old, full_name)
-        new = new and depot_badge(new, full_name)
+        old_badge = old and depot_badge(old, full_name)
+        new_badge = new and depot_badge(new, full_name)
         if old and new:
-            what = f"{old} → {new}"
+            what = f"{old_badge} → {new_badge}"
         elif new:
-            what = f"nowa brygada {new}"
+            what = f"nowa brygada {new_badge}"
         else:
-            what = f"likwidacja <span class=\"was\">(było {old})</span>"
-        ops = "|".join(p for label in (old_label, new_label) if label for p in label.split(" / "))
-        items.append(
-            f'<li data-o="|{html.escape(ops)}|"><b>{html.escape(line)}/{html.escape(", ".join(brigades))}</b> '
-            f'<span class="dt" title="{html.escape(dict((k, t) for k, t, _ in DAY_GROUPS)[group])}">'
-            f'{DAY_SHORT[group]}</span> od {short_date(date)}: {what}</li>'
-        )
+            what = f"likwidacja <span class=\"was\">(było {old_badge})</span>"
+        old_parts = old.split(" / ") if old else []
+        new_parts = new.split(" / ") if new else []
+        by_line.append(item(old_parts + new_parts, date, line, group, brigades, what))
+        # A part on both sides (R-1 → R-1 / R-2) neither gains nor loses the brigade.
+        for part in new_parts:
+            if part not in old_parts:
+                gains = by_op.setdefault(part, [[], [], 0, 0])
+                gains[0].append(item([part], date, line, group, brigades,
+                                     f"z {old_badge}" if old else "nowa brygada"))
+                gains[2] += len(brigades)
+        for part in old_parts:
+            if part not in new_parts:
+                losses = by_op.setdefault(part, [[], [], 0, 0])
+                losses[1].append(item([part], date, line, group, brigades,
+                                      f"do {new_badge}" if new else "likwidacja"))
+                losses[3] += len(brigades)
+
+    blocks = []
+    for op in sorted(by_op, key=depot_sort):
+        gains, losses, n_in, n_out = by_op[op]
+        lists = "".join(
+            f'<div class="cl"><h4>{title} <span class="cnt">{n}</span></h4>'
+            f'<ul class="changes">{"".join(items)}</ul></div>'
+            for title, items, n in (("przejmuje", gains, n_in), ("oddaje", losses, n_out)) if items)
+        blocks.append(
+            f'<div class="cg" data-o="|{html.escape(op)}|"><h3><span class="sw" '
+            f'style="background:{DEPOT_COLOR.get(op, DEPOT_COLOR[UNKNOWN])}"></span>'
+            f'{html.escape(full_name.get(op, op))} <span class="cnt">+{n_in} −{n_out}</span></h3>'
+            f'{lists}</div>')
+
     span = f"{short_date(editions[0])}–{short_date(editions[-1])}"
-    body = f'<ul class="changes">{"".join(items)}</ul>' if items else \
-        '<div class="sub">Brak zmian.</div>'
+    if not by_line:
+        body = '<div class="sub">Brak zmian.</div>'
+    else:
+        body = f"""<div class="tabs" role="tablist" aria-label="Grupowanie zmian">
+      <button type="button" role="tab" id="tab-line" aria-controls="ch-line" aria-selected="true">wg linii</button>
+      <button type="button" role="tab" id="tab-op" aria-controls="ch-op" aria-selected="false" tabindex="-1">wg zakładu / przewoźnika</button>
+    </div>
+    <div id="ch-line" role="tabpanel" aria-labelledby="tab-line"><ul class="changes">{"".join(by_line)}</ul></div>
+    <div id="ch-op" role="tabpanel" aria-labelledby="tab-op" hidden>{"".join(blocks)}</div>"""
     return f"""<section>
     <h2 class="sec">Zmiany przydziału</h2>
     <div class="sub">Rozkłady w feedzie: {span}. Każdą edycję porównujemy z tym samym dniem
-      tygodnia tydzień wcześniej.</div>
+      tygodnia tydzień wcześniej. Liczby przy zakładach to brygady (osobno dla DP i DŚ).</div>
     {body}
   </section>"""
 
@@ -666,6 +710,15 @@ def build_html(payload):
   .changes .d {{ min-width: 0; margin: 0; }}
   .changes .dt {{ line-height: inherit; }}
   .was {{ color: #999; }}
+  .tabs {{ display: flex; gap: 6px; margin: 10px 0 0; }}
+  .tabs button {{ font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer;
+    border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }}
+  .tabs button:hover {{ border-color: #06c; }}
+  .tabs button[aria-selected="true"] {{ background: #06c; border-color: #06c; color: #fff; }}
+  .cg h3 {{ font-size: 14px; margin: 16px 0 2px; display: flex; align-items: center; gap: 6px; }}
+  .cg h3 .cnt {{ margin-left: 2px; font-weight: 400; font-size: 12px; }}
+  .cl h4 {{ font-size: 12px; font-weight: 600; color: #666; margin: 6px 0 0; }}
+  .cl .changes {{ margin-top: 0; }}
   .foot {{ margin-top: 14px; color: #777; font-size: 12px; line-height: 1.6; }}
   .foot a {{ color: #06c; }}
 </style></head>
@@ -723,8 +776,30 @@ def build_html(payload):
       c.hidden = (op && !shown.some(e => e.classList.contains('g'))) || (t &&
         ![c.querySelector('h2'), ...shown].some(e => e.textContent.toLowerCase().includes(t)));
     }}
-    for (const c of changes) c.hidden = !mine(c) || (t && !c.textContent.toLowerCase().includes(t));
+    // An item in the per-operator tab also matches on its block's heading.
+    const text = c => ((c.closest('.cg')?.querySelector('h3').textContent || '') + ' ' + c.textContent).toLowerCase();
+    for (const c of changes) c.hidden = !mine(c) || (t && !text(c).includes(t));
+    // In the per-operator tab, drop the lists and blocks the filters have emptied.
+    for (const b of document.querySelectorAll('.cl, .cg')) b.hidden = !b.querySelector('li:not([hidden])');
   }};
+  const tabs = [...document.querySelectorAll('.tabs [role=tab]')];
+  const showTab = tab => {{
+    for (const o of tabs) {{
+      o.setAttribute('aria-selected', o === tab);
+      o.tabIndex = o === tab ? 0 : -1;
+      document.getElementById(o.getAttribute('aria-controls')).hidden = o !== tab;
+    }}
+  }};
+  for (const tab of tabs) {{
+    tab.addEventListener('click', () => showTab(tab));
+    tab.addEventListener('keydown', e => {{
+      const step = {{ArrowRight: 1, ArrowLeft: -1}}[e.key];
+      if (!step) return;
+      const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length];
+      showTab(next);
+      next.focus();
+    }});
+  }}
   const pick = o => {{
     op = o;
     for (const l of legend) l.setAttribute('aria-pressed', l.dataset.o === op);
