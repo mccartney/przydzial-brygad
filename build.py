@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Grzegorz Olędzki
-"""Render a one-page table of "which depot runs which brigade" for every WTP bus line.
+"""Render a one-page table of "which depot runs which brigade" for every WTP bus and tram line.
 
 Reads the Warsaw GTFS at https://436.pl/gtfs/warsaw.zip, built by
 https://github.com/mccartney/WarsawGTFS, and, for each day from today to the feed's newest
@@ -12,6 +12,7 @@ The depot comes straight from `depot_id`, a non-standard column the feed adds to
 trips.txt. It names MZA's depots by an internal code — R-7(W) is Woronicza, R11(K)
 Kleszczowa — and the contracted operators (Mobilis, PKS Grodzisk, ReloBus, KMŁ) outright,
 so it covers the whole network, not just the part that models pull-out/pull-in runs.
+Tramwaje Warszawskie's depots come the same way (R1(W) is Wola, ... R5(A) Annopol).
 
 Day types come from the service ids, which name them outright ("2026-10-03:SbS"), so
 a public holiday running the Sunday timetable is already filed as a Sunday.
@@ -42,6 +43,7 @@ DATA = Path("brygady.json")
 OUT = Path("przydzial.html")
 
 BUS_ROUTE_TYPE = "3"
+TRAM_ROUTE_TYPE = "0"
 # Local "L" lines are left out of the table. This feed does name their commune
 # operators (depot_id G-14, G-17, G-30, G-42), so they could be added.
 LOCAL_LINE = re.compile(r"^L-?\d+$")
@@ -67,7 +69,17 @@ DEPOTS = {
     "Relobus49": ("Relobus", "Relobus"),
     "Relobus58": ("Relobus", "Relobus"),
     "KMŁ K-26": ("KMŁ", "Komunikacja Miejska Łomianki"),
+    # Tramwaje Warszawskie. Their R-n numbering clashes with MZA's, so the table names
+    # them by site. Verified against the "Zjazd do zajezdni …" headsigns of each code.
+    "R1(W)": ("Wola", "R-1 Wola (tramwaje)"),
+    "R2(P)": ("Praga", "R-2 Praga (tramwaje)"),
+    "R3(M)": ("Mokotów", "R-3 Mokotów (tramwaje)"),
+    "R4(Z)": ("Żoliborz", "R-4 Żoliborz (tramwaje)"),
+    "R5(A)": ("Annopol", "R-5 Annopol (tramwaje)"),
+    # A few brigades (line 91) carry the company code but no depot.
+    "TW": ("TW", "Tramwaje Warszawskie (bez wskazanej zajezdni)"),
 }
+TRAM_DEPOTS = {"Wola", "Praga", "Mokotów", "Żoliborz", "Annopol", "TW"}
 
 # Operators that run several contracts, one depot_id per contract. The table files them
 # under the operator, as above; picking the operator in the legend splits its rows per
@@ -101,9 +113,10 @@ USUAL_CODE = ["PcS", "PcS", "PcS", "PcS", "PtS", "SbS", "NdS"]
 CODE_NAME = {"PcS": "powszedni", "PtS": "piątkowy", "SbS": "sobotni", "NdS": "świąteczny"}
 
 ROUTE_URL = "https://zbiorkom.live/warsaw/route/{}/brigades"
+SONG_URL = "https://www.youtube.com/watch?v=QTp036qRSBw"
 
-# Vehicle class from fleet_type, another trips.txt extension: "G-np18m" -> "G". Only the
-# bus classes; tram and rail types never reach the bus table anyway.
+# Vehicle class from fleet_type, another trips.txt extension: "G-np18m" -> "G" for buses.
+# Trams keep fleet_type as is ("120N", "DUO", "2 wagony").
 VEHICLE_CLASS = re.compile(r"^([KMLGH])-")
 # Smallest first, the order a mixed line lists its classes in.
 VEHICLE_NAME = {
@@ -113,10 +126,21 @@ VEHICLE_NAME = {
     "G": "przegubowy mega, 18 m",
     "H": "elektryczny przegubowy mega, 18 m",
 }
+# Tram fleet_type -> (tag text, tooltip). The feed's own names, bar the one with a space.
+# A type missing here is shown as it comes.
+TRAM_FLEET = {
+    "2 wagony": ("2w", "skład dwóch wagonów"),
+    "DUO": ("DUO", "DUO"),
+    "116N/142N": ("116N/142N", "116N/142N"),
+    "120N": ("120N", "120N"),
+    "134N": ("134N", "134N"),
+}
+VEHICLE_ORDER = list(VEHICLE_NAME) + list(TRAM_FLEET)
 
 UNKNOWN = "nieznany"
 DEPOT_ORDER = ["R-1", "R-2", "R-3", "R-4", "R-5", "R-6",
-               "Mobilis", "PKS Grodzisk", "Relobus", "KMŁ", UNKNOWN]
+               "Mobilis", "PKS Grodzisk", "Relobus", "KMŁ",
+               "Wola", "Praga", "Mokotów", "Żoliborz", "Annopol", "TW", UNKNOWN]
 DEPOT_COLOR = {
     "R-1": "#cfe0ff",
     "R-2": "#cdeed6",
@@ -128,6 +152,12 @@ DEPOT_COLOR = {
     "PKS Grodzisk": "#dcccc4",
     "Relobus": "#d2e8ae",
     "KMŁ": "#f2c9e2",
+    "Wola": "#ffcdc7",
+    "Praga": "#e3d5b8",
+    "Mokotów": "#c6e3f7",
+    "Żoliborz": "#f5eaa0",
+    "Annopol": "#d6d6a8",
+    "TW": "#d8dde3",
     UNKNOWN: "#e6e6e6",
 }
 DEPOT_FULL = {}  # short label -> "R-1 Woronicza", filled while parsing
@@ -267,15 +297,21 @@ def before_date(d, date, days):
 def read_trips(feed, services):
     """One pass over trips.txt: (service_id, line, brigade) -> set of depot labels.
 
-    Returns that alongside the same slots' vehicle class letter (left out where fleet_type
-    is missing), their contracts (set of CONTRACTS labels, only for the operators listed
-    there) and a count of depot_id values missing from DEPOTS, so a renamed or newly
-    added operator shows up in the log instead of quietly becoming "nieznany".
+    Covers bus and tram lines. Returns that alongside the same slots' vehicle class (bus
+    class letter or tram fleet_type, left out where fleet_type is missing), their contracts
+    (set of CONTRACTS labels, only for the operators listed there), a count of depot_id
+    values missing from DEPOTS, so a renamed or newly added operator shows up in the log
+    instead of quietly becoming "nieznany", and the set of tram lines.
     """
-    bus_lines = {}
+    lines = {}  # route_id -> line
+    trams = set()
     for r in feed.rows("routes"):
-        if r["route_type"] == BUS_ROUTE_TYPE and not LOCAL_LINE.match(r["route_short_name"]):
-            bus_lines[r["route_id"]] = r["route_short_name"]
+        name = r["route_short_name"]
+        if r["route_type"] == BUS_ROUTE_TYPE and not LOCAL_LINE.match(name):
+            lines[r["route_id"]] = name
+        elif r["route_type"] == TRAM_ROUTE_TYPE:
+            lines[r["route_id"]] = name
+            trams.add(name)
 
     pair_depots = {}
     fleet = {}
@@ -283,7 +319,7 @@ def read_trips(feed, services):
     unmapped = {}
     for t in feed.rows("trips"):
         sid = t["service_id"]
-        line = bus_lines.get(t["route_id"])
+        line = lines.get(t["route_id"])
         # block_short_name (the brigade) and depot_id are extensions, not GTFS: read them
         # defensively so that a feed dropping either fails the coverage guard instead of
         # the parse.
@@ -303,10 +339,13 @@ def read_trips(feed, services):
         if depot in CONTRACTS:
             contracts.setdefault((sid, line, brigade), set()).add(CONTRACTS[depot][0])
         # A brigade runs one vehicle all day, so every trip of it carries the same class.
-        cls = VEHICLE_CLASS.match(t.get("fleet_type") or "")
-        if cls:
-            fleet[(sid, line, brigade)] = cls[1]
-    return pair_depots, fleet, contracts, unmapped
+        fleet_type = t.get("fleet_type") or ""
+        if line not in trams:
+            cls = VEHICLE_CLASS.match(fleet_type)
+            fleet_type = cls[1] if cls else ""
+        if fleet_type:
+            fleet[(sid, line, brigade)] = fleet_type
+    return pair_depots, fleet, contracts, unmapped, trams
 
 
 def day_plans(slots, fleet, contracts, calendar, editions):
@@ -385,7 +424,8 @@ def line_sort(line):
 
 
 def vehicle_tag(cls):
-    return f'<span class="vt" title="{html.escape(VEHICLE_NAME[cls])}">{cls}</span>'
+    tag, tip = (cls, VEHICLE_NAME[cls]) if cls in VEHICLE_NAME else TRAM_FLEET.get(cls, (cls, cls))
+    return f'<span class="vt" title="{html.escape(tip)}">{html.escape(tag)}</span>'
 
 
 def entry_class(entry):
@@ -396,6 +436,15 @@ def entry_class(entry):
 def entry_contract(entry):
     # brygady.json files from before contracts were tracked have two-element entries.
     return entry[2] if len(entry) > 2 else None
+
+
+def depot_mode(label):
+    """'tram' for a Tramwaje Warszawskie depot, 'bus' for the rest, '' for 'nieznany'."""
+    return "" if label == UNKNOWN else "tram" if label in TRAM_DEPOTS else "bus"
+
+
+def line_mode(line, trams):
+    return "tram" if line in trams else "bus"
 
 
 def operators_attr(label):
@@ -421,7 +470,8 @@ def format_brigades(entries, by_class=False):
     for e in entries:
         runs.setdefault(entry_class(e) if by_class else None, []).append(e)
     out = []
-    for cls in sorted(runs, key=lambda c: list(VEHICLE_NAME).index(c) if c in VEHICLE_NAME else len(VEHICLE_NAME)):
+    for cls in sorted(runs, key=lambda c: (VEHICLE_ORDER.index(c), "") if c in VEHICLE_ORDER
+                      else (len(VEHICLE_ORDER), c or "")):
         text = ", ".join(html.escape(e[0]) for e in runs[cls])
         out.append(f"{vehicle_tag(cls)} {text}" if cls else text)
     return " ".join(out)
@@ -453,6 +503,7 @@ def build_changes(payload):
     if changes is None or not editions:
         return ""
     full_name = payload["depots"]
+    trams = set(payload.get("trams", ()))
     group_name = {k: t for k, t, _ in DAY_GROUPS}
     # Changes come sorted by date, line, brigade, so each group's brigades come out sorted.
     grouped = {}
@@ -463,7 +514,8 @@ def build_changes(payload):
         line_sort(kv[0][1]), kv[0][0], group_order.index(kv[0][2]), brigade_sort(kv[1][0]) + (kv[1][0],)))
 
     def item(ops, date, line, group, brigades, what):
-        return (f'<li data-o="|{html.escape("|".join(ops))}|"><b>{html.escape(line)}/'
+        return (f'<li data-o="|{html.escape("|".join(ops))}|" data-m="{line_mode(line, trams)}">'
+                f'<b>{html.escape(line)}/'
                 f'{html.escape(", ".join(brigades))}</b> '
                 f'<span class="dt" title="{html.escape(group_name[group])}">{DAY_SHORT[group]}</span> '
                 f'od {short_date(date)}: {what}</li>')
@@ -505,7 +557,7 @@ def build_changes(payload):
             f'<ul class="changes">{"".join(items)}</ul></div>'
             for title, items, n in (("przejmuje", gains, n_in), ("oddaje", losses, n_out)) if items)
         blocks.append(
-            f'<div class="cg" data-o="|{html.escape(op)}|"><h3><span class="sw" '
+            f'<div class="cg" data-o="|{html.escape(op)}|" data-m="{depot_mode(op)}"><h3><span class="sw" '
             f'style="background:{DEPOT_COLOR.get(op, DEPOT_COLOR[UNKNOWN])}"></span>'
             f'{html.escape(full_name.get(op, op))} <span class="cnt">+{n_in} −{n_out}</span></h3>'
             f'{lists}</div>')
@@ -566,19 +618,24 @@ def build_html(payload):
     lines = payload["lines"]
     days = payload["days"]
     full_name = payload["depots"]
+    # brygady.json files from before trams were added have no "trams": all buses.
+    trams = set(payload.get("trams", ()))
     day_runs = runs(days)
     n_plans = max(d["plan"] for d in days) + 1
     # Rendered for the first day; the script switches to today's on load.
     shown = day_runs[0][2]
 
     counts = {}  # depot -> [brigades in plan 0, plan 1, ...]
-    for variants in lines.values():
+    # The same per mode, for "nieznany", the one entry both buses and trams can have.
+    mode_counts = {}  # (depot, mode) -> [...]
+    for line, variants in lines.items():
         for v in variants:
             for label, brigades in v["depots"].items():
                 for part in label.split(" / "):
-                    per_plan = counts.setdefault(part, [0] * n_plans)
-                    for n in v["plans"]:
-                        per_plan[n] += len(brigades)
+                    for per_plan in (counts.setdefault(part, [0] * n_plans),
+                                     mode_counts.setdefault((part, line_mode(line, trams)), [0] * n_plans)):
+                        for n in v["plans"]:
+                            per_plan[n] += len(brigades)
 
     def plans_attr(numbers):
         hidden = "" if shown in numbers else " hidden"
@@ -624,7 +681,7 @@ def build_html(payload):
         if idle:
             rows.append(f'<div class="v none" {plans_attr(idle)}>nie kursuje</div>')
         cards.append(
-            f'<article class="card"><h2><a href="{html.escape(url)}" target="_blank" '
+            f'<article class="card" data-m="{line_mode(line, trams)}"><h2><a href="{html.escape(url)}" target="_blank" '
             f'rel="noopener" title="{html.escape(line)} na zbiorkom.live">{html.escape(line)}</a>{line_tag}</h2>'
             + "".join(rows) + "</article>"
         )
@@ -635,9 +692,13 @@ def build_html(payload):
             continue
         full = full_name.get(label, label)
         n = counts[label]
+        per_mode = "" if depot_mode(label) else "".join(
+            f' data-n{m}="{" ".join(map(str, mode_counts.get((label, m), [0] * n_plans)))}"'
+            for m in ("bus", "tram"))
         legend.append(
-            f'<button type="button" class="leg" data-o="{html.escape(label)}" aria-pressed="false" '
-            f'data-n="{" ".join(map(str, n))}"{"" if n[shown] else " hidden"}>'
+            f'<button type="button" class="leg" data-o="{html.escape(label)}" data-m="{depot_mode(label)}" '
+            f'aria-pressed="false" '
+            f'data-n="{" ".join(map(str, n))}"{per_mode}{"" if n[shown] else " hidden"}>'
             f'<span class="sw" style="background:{DEPOT_COLOR[label]}"></span>'
             f'{html.escape(full)} <span class="cnt">{n[shown]}</span></button>'
         )
@@ -651,7 +712,18 @@ def build_html(payload):
             f'{run_label(first, last, members)}</button>')
 
     vehicle_note = " · ".join(f"<b>{c}</b> — {html.escape(n)}" for c, n in VEHICLE_NAME.items())
+    tram_note = " · ".join(f"<b>{html.escape(tag)}</b>" + (f" — {html.escape(tip)}" if tip != tag else "")
+                           for tag, tip in TRAM_FLEET.values())
     span = f"{short_date(days[0]['date'])}–{short_date(days[-1]['date'])}"
+    n_tram = sum(line in trams for line in lines)
+    n_bus = len(lines) - n_tram
+    line_count = f"{n_bus} linii autobusowych" + (f" i {n_tram} tramwajowych" if n_tram else "")
+    modes = "".join(
+        f'<button type="button" data-m="{m}" aria-pressed="{"true" if m == "bus" else "false"}">{t}</button>'
+        for m, t in (("bus", "autobusy"), ("tram", "tramwaje")))
+    # Not a mode: the combined view it would name is a T.Love song instead.
+    modes += (f'<a href="{SONG_URL}" target="_blank" rel="noopener" '
+              f'title="T.Love — Autobusy i tramwaje">autobusy i tramwaje ♪</a>')
 
     return f"""<!DOCTYPE html>
 <html lang="pl"><head><meta charset="utf-8">
@@ -674,13 +746,15 @@ def build_html(payload):
     background: #fff; }}
   .card h2 {{ margin: 0 0 4px; font-size: 16px; font-variant-numeric: tabular-nums; }}
   .card h2 a {{ color: inherit; text-decoration: none; }}
-  .card h2 a:hover {{ color: #06c; text-decoration: underline; }}
+  .card[data-m="tram"] h2 a {{ color: #b60000; }}
+  .card h2 a:hover, .card[data-m="tram"] h2 a:hover {{ color: #06c; text-decoration: underline; }}
   .card h2 a:focus-visible {{ outline: 2px solid #06c; outline-offset: 2px; border-radius: 2px; }}
-  .days {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }}
-  .days button {{ font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer;
+  .days, .modes {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; }}
+  .days button, .modes button, .modes a {{ font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer;
     border: 1px solid #ccc; border-radius: 5px; background: #fff; color: inherit; }}
-  .days button:hover {{ border-color: #06c; }}
-  .days button[aria-pressed="true"] {{ background: #06c; border-color: #06c; color: #fff; }}
+  .days button:hover, .modes button:hover, .modes a:hover {{ border-color: #06c; }}
+  .modes a {{ text-decoration: none; }}
+  .days button[aria-pressed="true"], .modes button[aria-pressed="true"] {{ background: #06c; border-color: #06c; color: #fff; }}
   .days button.today::after {{ content: "dziś"; margin-left: 6px; font-size: 10px;
     font-weight: 600; text-transform: uppercase; opacity: .7; }}
   .hol {{ font-size: 11px; opacity: .75; }}
@@ -726,23 +800,25 @@ def build_html(payload):
   <header class="h436"><a href="https://436.pl/"><img src="https://436.pl/436.png" alt="436"
     width="480" height="289">.pl/</a><span>przydzial-brygad/</span></header>
   <h1>Przydział brygad — zakłady i przewoźnicy WTP</h1>
-  <div class="sub">{len(lines)} linii autobusowych · rozkłady na dni {span} · bez linii L</div>
+  <div class="sub">{line_count} · rozkłady na dni {span} · bez linii L</div>
   <div class="sub">źródło: <a href="https://github.com/mccartney/WarsawGTFS">mccartney/WarsawGTFS</a> ·
     feed {html.escape(payload["feedVersion"] or "?")} · zaktualizowano {payload["generated"]}</div>
   <div class="sub">Uwagi? Można zgłaszać na <a href="https://wawkom.waw.pl/viewtopic.php?t=11090">forum wawkom</a>
     albo <a href="https://github.com/mccartney/przydzial-brygad/issues">w GitHubie</a>.</div>
+  <nav class="modes" aria-label="Rodzaj linii">{modes}</nav>
   <div class="legend">{''.join(legend)}</div>
-  <div class="sub">Kliknij zakład lub przewoźnika, by pokazać tylko jego brygady;
-    {' i '.join(html.escape(o) for o in split_ops)} — z podziałem na umowy (numer kodu z feedu).</div>
-  <div class="sub">{vehicle_note}</div>
+  <div class="sub">Kliknij zakład lub przewoźnika, by pokazać tylko jego brygady<span data-m="bus">;
+    {' i '.join(html.escape(o) for o in split_ops)} — z podziałem na umowy (numer kodu z feedu)</span>.</div>
+  <div class="sub" data-m="bus">{vehicle_note}</div>
+  <div class="sub" data-m="tram">tramwaje: {tram_note} (typ taboru z feedu)</div>
   <nav class="days" aria-label="Dzień">{''.join(selector)}</nav>
   <div class="tools"><input id="q" type="search" placeholder="filtruj: numer linii lub zakład"></div>
   <div class="cards">{''.join(cards)}</div>
   {build_changes(payload)}
   <div class="foot">
     Zakład bierzemy wprost z pola <code>depot_id</code>, które feed GTFS dokłada do
-    <code>trips.txt</code> — obejmuje ono zarówno zajezdnie MZA, jak i przewoźników
-    kontraktowych. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola. Mobilis i Relobus
+    <code>trips.txt</code> — obejmuje ono zajezdnie MZA, przewoźników kontraktowych
+    i zajezdnie Tramwajów Warszawskich. Jako <b>nieznany</b> wychodzą tylko kursy bez tego pola. Mobilis i Relobus
     mają po kilka kodów, po jednym na umowę; po wybraniu przewoźnika w legendzie brygady są
     rozpisane na te kody (np. <code>Relobus38</code> → „Relobus 38”).
     Typ taboru (litera przy numerze linii lub przed brygadami) pochodzi z pola <code>fleet_type</code>.
@@ -759,12 +835,17 @@ def build_html(payload):
   const buttons = [...document.querySelectorAll('.days button')];
   const legend = [...document.querySelectorAll('.leg')];
   const legendBox = document.querySelector('.legend');
+  const modeButtons = [...document.querySelectorAll('.modes button')];
   let plan = buttons[0].dataset.p;
   let op = '';  // the depot or operator picked in the legend, '' for all
+  let mode = 'bus';  // 'bus' or 'tram'
+  // Elements with no data-m (or an empty one, like "nieznany") belong to both modes.
+  const inMode = e => !e.dataset.m || e.dataset.m === mode;
   const mine = e => !op || e.dataset.o.includes(`|${{op}}|`);
   const filter = () => {{
     const t = q.value.trim().toLowerCase();
     for (const c of cards) {{
+      if (!inMode(c)) {{ c.hidden = true; continue; }}
       // With an operator picked, only its rows stay, those with contracts split per contract.
       for (const g of c.querySelectorAll('.g')) {{
         g.hidden = !mine(g) || (g.classList.contains('k') ? !op : !!op && g.classList.contains('has-k'));
@@ -778,7 +859,7 @@ def build_html(payload):
     }}
     // An item in the per-operator tab also matches on its block's heading.
     const text = c => ((c.closest('.cg')?.querySelector('h3').textContent || '') + ' ' + c.textContent).toLowerCase();
-    for (const c of changes) c.hidden = !mine(c) || (t && !text(c).includes(t));
+    for (const c of changes) c.hidden = !inMode(c) || !mine(c) || (t && !text(c).includes(t));
     // In the per-operator tab, drop the lists and blocks the filters have emptied.
     for (const b of document.querySelectorAll('.cl, .cg')) b.hidden = !b.querySelector('li:not([hidden])');
   }};
@@ -808,16 +889,31 @@ def build_html(payload):
     filter();
   }};
   for (const l of legend) l.addEventListener('click', () => pick(op === l.dataset.o ? '' : l.dataset.o));
+  // Legend entries for the selected day and mode; a picked one that goes away is let go.
+  const showLegend = () => {{
+    for (const l of legend) {{
+      const n = (l.dataset['n' + mode] || l.dataset.n).split(' ')[plan];
+      l.querySelector('.cnt').textContent = n;
+      l.hidden = n === '0' || !inMode(l);
+      if (l.hidden && l.dataset.o === op) pick('');
+    }}
+  }};
+  const setMode = m => {{
+    mode = m;
+    for (const b of modeButtons) b.setAttribute('aria-pressed', b.dataset.m === mode);
+    for (const e of document.querySelectorAll('.sub[data-m], .sub [data-m]')) e.hidden = !inMode(e);
+    showLegend();
+    filter();
+  }};
+  for (const b of modeButtons) b.addEventListener('click', () => {{
+    setMode(b.dataset.m);
+    try {{ localStorage.setItem('tryb', mode); }} catch (e) {{}}
+  }});
   const select = b => {{
     plan = b.dataset.p;
     for (const o of buttons) o.setAttribute('aria-pressed', o === b);
     for (const v of document.querySelectorAll('.v')) v.hidden = !v.dataset.p.includes(` ${{plan}} `);
-    for (const l of legend) {{
-      const n = l.dataset.n.split(' ')[plan];
-      l.querySelector('.cnt').textContent = n;
-      l.hidden = n === '0';
-      if (l.hidden && l.dataset.o === op) pick('');
-    }}
+    showLegend();
     filter();
   }};
   // Today in Warsaw as YYYY-MM-DD. Days already past are dropped, unless the page is so
@@ -828,9 +924,16 @@ def build_html(payload):
     b.classList.toggle('today', b.dataset.from <= today && today <= b.dataset.to);
     b.addEventListener('click', () => select(b));
   }}
+  // The mode picked last time, unless a linked depot belongs to the other one.
+  let saved = null;
+  try {{ saved = localStorage.getItem('tryb'); }} catch (e) {{}}
+  if (modeButtons.some(b => b.dataset.m === saved)) mode = saved;
   let fromHash = '';
   try {{ fromHash = decodeURIComponent(location.hash.slice(1)); }} catch (e) {{}}
-  if (legend.some(l => l.dataset.o === fromHash)) pick(fromHash);
+  const linked = legend.find(l => l.dataset.o === fromHash);
+  if (linked && !inMode(linked)) mode = linked.dataset.m;
+  if (linked) pick(fromHash);
+  setMode(mode);
   const live = buttons.filter(b => !b.hidden);
   if (!live.length) buttons.at(-1).hidden = false;
   select(live[0] || buttons.at(-1));
@@ -873,7 +976,7 @@ def main():
     calendar = read_calendar(feed, editions, today)
     print(f"feed_version: {version} · {len(editions)} editions", file=sys.stderr)
 
-    slots, fleet, contracts, unmapped = read_trips(feed, editions)
+    slots, fleet, contracts, unmapped, trams = read_trips(feed, editions)
     days, lines = day_plans(slots, fleet, contracts, calendar, editions)
     for day in days:
         print(f"  {day['date']} {calendar[datetime.date.fromisoformat(day['date'])]} "
@@ -890,6 +993,7 @@ def main():
         # Today to the newest edition, each day pointing at its network-wide plan by number.
         "days": days,
         "lines": lines,
+        "trams": sorted(trams & lines.keys(), key=line_sort),
         # Dated depot changes across the editions, for the list under the cards.
         "editions": sorted({date.isoformat() for date, _code in editions.values()}),
         "changes": changes,
