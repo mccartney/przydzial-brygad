@@ -25,7 +25,9 @@ kursująca np. tylko w czwartki nie „znikała” co tydzień), a zmiana datowa
 dnia, od którego nowy stan obowiązuje bez przerwy. Lista ma dwie zakładki: **wg linii** (jak
 wyżej) i **wg zakładu / przewoźnika** — blok na każdy zakład lub przewoźnika z tym, co
 przejmuje (`116/01 DP od 12.10: z R-1`) i co oddaje (`… do R-2`, `likwidacja`); zmiana między
-dwoma zakładami pojawia się w obu blokach.
+dwoma zakładami pojawia się w obu blokach. Brygada obsługiwana jednym pojazdem na kilku liniach
+(ten sam `block_id` w feedzie) jest w liście zmian jedną pozycją, np. `411+502 / 721, 722`,
+a nie osobno dla każdej linii — w kartach linii nadal widać ją przy każdej z nich.
 
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
 MZA, jak i przewoźników kontraktowych (Mobilis, PKS Grodzisk, Relobus, KMŁ) oraz zajezdnie

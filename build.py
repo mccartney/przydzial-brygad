@@ -245,7 +245,7 @@ def read_calendar(feed, editions, start):
     return dict(sorted(calendar.items()))
 
 
-def find_changes(slots, editions):
+def find_changes(slots, editions, shared):
     """Depot changes between the editions the feed carries, oldest first.
 
     Each edition is held against the one for the same weekday a week earlier, not just
@@ -253,6 +253,10 @@ def find_changes(slots, editions):
     that runs on Thursdays only would otherwise "appear" and "vanish" every week. A
     difference found that way is then dated back to the first edition since which the
     new state holds without a break, which is where the change really starts.
+
+    A brigade that one vehicle runs on several lines (the same block_id in trips.txt, see
+    `shared`) changes on all of them at once; that comes out as one change with the lines
+    joined, "411+502", rather than one per line, so it is not counted twice.
 
     Returns [{"date", "line", "brigade", "group", "old", "new"}], with old/new a depot
     label or None for a brigade that does not run.
@@ -263,7 +267,7 @@ def find_changes(slots, editions):
     by_date = {(date, code): sid for sid, (date, code) in editions.items()}
     group_of = {code: key for key, _t, codes in DAY_GROUPS for code in codes}
 
-    changes = {}
+    changes = {}  # (since, brigade, group, old, new) -> {changed line: lines it shares with}
     for sid, (date, code) in editions.items():
         before = by_date.get((date - datetime.timedelta(days=7), code))
         if before is None:
@@ -282,11 +286,67 @@ def find_changes(slots, editions):
                     break
                 since = d
             line, brigade = key
-            changes[(since, line, brigade, group_of[code], old, new)] = None
-    return [{"date": since.isoformat(), "line": line, "brigade": brigade, "group": group,
-             "old": old, "new": new}
-            for since, line, brigade, group, old, new in sorted(
-                changes, key=lambda c: (c[0], line_sort(c[1]), brigade_sort(c[2]) + (c[2],), c[3]))]
+            # The lines it shares the vehicle with, in the edition where it runs.
+            partners = shared.get(sid if new else before, {}).get(key, {line})
+            changes.setdefault((since, brigade, group_of[code], old, new), {}).setdefault(
+                line, set()).update(partners)
+
+    out = []
+    for (since, brigade, group, old, new), lines in changes.items():
+        # Lines that changed alike and share the brigade's vehicle make one change.
+        merged = Merge()
+        for line, partners in lines.items():
+            for other in partners & lines.keys():
+                merged.union(line, other)
+        for joined in merged.groups(lines):
+            out.append({"date": since.isoformat(), "line": "+".join(sorted(joined, key=line_sort)),
+                        "brigade": brigade, "group": group, "old": old, "new": new})
+    out.sort(key=lambda c: (c["date"], line_sort(c["line"]), brigade_sort(c["brigade"]) + (c["brigade"],),
+                            c["group"], c["old"] or "", c["new"] or ""))
+    return out
+
+
+class Merge:
+    """Union-find: items joined into groups by pairs."""
+
+    def __init__(self):
+        self.parent = {}
+
+    def find(self, x):
+        while self.parent.setdefault(x, x) != x:
+            self.parent[x] = x = self.parent[self.parent[x]]
+        return x
+
+    def union(self, a, b):
+        self.parent[self.find(a)] = self.find(b)
+
+    def groups(self, items):
+        out = {}
+        for x in items:
+            out.setdefault(self.find(x), set()).add(x)
+        return list(out.values())
+
+
+def shared_lines(blocks):
+    """{service_id: {(line, brigade): set of lines}}, the lines each brigade's vehicle runs.
+
+    `blocks` is {service_id: {block_id: {(line, brigade), ...}}}. A block is one vehicle's
+    day, and ZTM keeps one brigade number across all the lines it runs, so a block holding
+    several lines is a brigade shared between them. Only multi-line brigades are listed.
+    """
+    out = {}
+    for sid, by_block in blocks.items():
+        merged = Merge()
+        for pairs in by_block.values():
+            first, *rest = pairs
+            for pair in rest:
+                merged.union(first, pair)
+        for group in merged.groups({p for pairs in by_block.values() for p in pairs}):
+            if len(group) > 1:
+                lines = {line for line, _brigade in group}
+                for pair in group:
+                    out.setdefault(sid, {})[pair] = lines
+    return out
 
 
 def before_date(d, date, days):
@@ -301,7 +361,8 @@ def read_trips(feed, services):
     class letter or tram fleet_type, left out where fleet_type is missing), their contracts
     (set of CONTRACTS labels, only for the operators listed there), a count of depot_id
     values missing from DEPOTS, so a renamed or newly added operator shows up in the log
-    instead of quietly becoming "nieznany", and the set of tram lines.
+    instead of quietly becoming "nieznany", the set of tram lines, and the slots of every
+    block_id ({service_id: {block_id: {(line, brigade), ...}}}).
     """
     lines = {}  # route_id -> line
     trams = set()
@@ -317,6 +378,7 @@ def read_trips(feed, services):
     fleet = {}
     contracts = {}
     unmapped = {}
+    blocks = {}
     for t in feed.rows("trips"):
         sid = t["service_id"]
         line = lines.get(t["route_id"])
@@ -326,6 +388,8 @@ def read_trips(feed, services):
         brigade = t.get("block_short_name")
         if sid not in services or line is None or not brigade:
             continue
+        if t.get("block_id"):
+            blocks.setdefault(sid, {}).setdefault(t["block_id"], set()).add((line, brigade))
         depot = t.get("depot_id")
         label = None
         if depot in DEPOTS:
@@ -345,7 +409,7 @@ def read_trips(feed, services):
             fleet_type = cls[1] if cls else ""
         if fleet_type:
             fleet[(sid, line, brigade)] = fleet_type
-    return pair_depots, fleet, contracts, unmapped, trams
+    return pair_depots, fleet, contracts, unmapped, trams, blocks
 
 
 def day_plans(slots, fleet, contracts, calendar, editions):
@@ -415,6 +479,9 @@ def brigade_sort(brigade):
 
 
 def line_sort(line):
+    # A change on a shared brigade names several lines, "411+502": it goes with its first.
+    if "+" in line:
+        return line_sort(line.split("+")[0])[:-1] + (line,)
     if line.isdigit():
         return (0, "", int(line), line)
     m = re.match(r"^([A-Za-z]+)-?(\d+)$", line)
@@ -444,7 +511,7 @@ def depot_mode(label):
 
 
 def line_mode(line, trams):
-    return "tram" if line in trams else "bus"
+    return "tram" if line.split("+")[0] in trams else "bus"
 
 
 def operators_attr(label):
@@ -495,7 +562,8 @@ def build_changes(payload):
     """The list under the cards, in two tabs over the same changes.
 
     By line: '116/01, 03 DP od 12.10: R-1 → R-2', one item per line, day group, date and
-    kind of change, with all the brigades it hits. By operator: a block per depot or
+    kind of change, with all the brigades it hits; brigades shared by several lines get an
+    item of their own, '411+502 / 721, 722'. By operator: a block per depot or
     operator, listing what it takes over ('116/01, 03 DP od 12.10: z R-1') and what it
     gives up ('… do R-2'), so a change between two of them shows in both blocks."""
     changes = payload.get("changes")
@@ -515,7 +583,7 @@ def build_changes(payload):
 
     def item(ops, date, line, group, brigades, what):
         return (f'<li data-o="|{html.escape("|".join(ops))}|" data-m="{line_mode(line, trams)}">'
-                f'<b>{html.escape(line)}/'
+                f'<b>{html.escape(line)}{" / " if "+" in line else "/"}'
                 f'{html.escape(", ".join(brigades))}</b> '
                 f'<span class="dt" title="{html.escape(group_name[group])}">{DAY_SHORT[group]}</span> '
                 f'od {short_date(date)}: {what}</li>')
@@ -976,12 +1044,12 @@ def main():
     calendar = read_calendar(feed, editions, today)
     print(f"feed_version: {version} · {len(editions)} editions", file=sys.stderr)
 
-    slots, fleet, contracts, unmapped, trams = read_trips(feed, editions)
+    slots, fleet, contracts, unmapped, trams, blocks = read_trips(feed, editions)
     days, lines = day_plans(slots, fleet, contracts, calendar, editions)
     for day in days:
         print(f"  {day['date']} {calendar[datetime.date.fromisoformat(day['date'])]} "
               f"plan {day['plan']}", file=sys.stderr)
-    changes = find_changes(slots, editions)
+    changes = find_changes(slots, editions, shared_lines(blocks))
     print(f"{len(slots)} (edition, line, brigade) slots · {len(changes)} changes", file=sys.stderr)
     for depot, n in sorted(unmapped.items(), key=lambda kv: -kv[1]):
         print(f"  WARNING: depot_id {depot!r} not in DEPOTS ({n} trips)", file=sys.stderr)
