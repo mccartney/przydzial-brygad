@@ -560,17 +560,18 @@ def short_date(iso):
 
 def split_renumberings(changes):
     """Takes out a brigade that goes and one that comes in its place under the same number
-    spelled with a leading zero, "6" and "06" (same date, line and day group).
+    spelled with a leading zero, "6" and "06" (same date, line, day group and depot). One
+    that moves to another depot as well stays a removal and a new brigade.
 
-    Returns the remaining changes and {(date, line, group, old, new): [("6", "06"), ...]},
-    old being the gone brigade's depot and new the new one's."""
+    Returns the remaining changes and {(date, line, group, depot, depot): [("6", "06"), ...]}."""
     def number(brigade):
         return brigade.lstrip("0") or "0"
     gone, came = {}, {}
     for i, c in enumerate(changes):
         if bool(c["old"]) != bool(c["new"]):
             side = gone if c["old"] else came
-            side.setdefault((c["date"], c["line"], c["group"], number(c["brigade"])), []).append(i)
+            key = (c["date"], c["line"], c["group"], c["old"] or c["new"], number(c["brigade"]))
+            side.setdefault(key, []).append(i)
     paired = set()
     renumbered = {}
     for key, olds in gone.items():
@@ -582,7 +583,7 @@ def split_renumberings(changes):
             news.remove(j)
             paired.update((i, j))
             a, b = changes[i], changes[j]
-            renumbered.setdefault((a["date"], a["line"], a["group"], a["old"], b["new"]), []).append(
+            renumbered.setdefault((a["date"], a["line"], a["group"], a["old"], a["old"]), []).append(
                 (a["brigade"], b["brigade"]))
     return [c for i, c in enumerate(changes) if i not in paired], renumbered
 
@@ -658,29 +659,15 @@ def build_changes(payload):
     # A brigade renumbered between "6" and "06": one item, "739/6 → 06", not a removal
     # and a new brigade.
     by_line_renum = []
-    for (date, line, group, old, new), pairs in renum_rows:
-        old_badge = depot_badge(old, full_name)
-        new_badge = depot_badge(new, full_name)
+    for (date, line, group, depot, _depot), pairs in renum_rows:
         labels = [f"{a} → {b}" for a, b in pairs]
-        old_parts = old.split(" / ")
-        new_parts = new.split(" / ")
-        by_line_renum.append(item(old_parts + new_parts, date, line, group, labels,
-                                  new_badge if old == new else f"{old_badge} → {new_badge}"))
-        # Per operator, one that keeps the brigade sees the renumbering; one that takes it
-        # over or gives it up sees that.
-        for part in new_parts:
+        parts = depot.split(" / ")
+        by_line_renum.append(item(parts, date, line, group, labels, depot_badge(depot, full_name)))
+        # The depot keeps the brigade: it neither takes it over nor gives it up.
+        for part in parts:
             entry = by_op.setdefault(part, [[], [], 0, 0, [], 0])
-            if part in old_parts:
-                entry[4].append(item([part], date, line, group, labels, depot_badge(part, full_name)))
-                entry[5] += len(pairs)
-            else:
-                entry[0].append(item([part], date, line, group, labels, f"z {old_badge}"))
-                entry[2] += len(pairs)
-        for part in old_parts:
-            if part not in new_parts:
-                entry = by_op.setdefault(part, [[], [], 0, 0, [], 0])
-                entry[1].append(item([part], date, line, group, labels, f"do {new_badge}"))
-                entry[3] += len(pairs)
+            entry[4].append(item([part], date, line, group, labels, depot_badge(part, full_name)))
+            entry[5] += len(pairs)
 
     def change_list(title, items, n=None):
         count = "" if n is None else f' <span class="cnt">{n}</span>'
