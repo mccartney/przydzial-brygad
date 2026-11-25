@@ -28,6 +28,10 @@ przejmuje (`116/01 DP od 12.10: z R-1`) i co oddaje (`… do R-2`, `likwidacja`)
 dwoma zakładami pojawia się w obu blokach. Brygada obsługiwana jednym pojazdem na kilku liniach
 (ten sam `block_id` w feedzie) jest w liście zmian jedną pozycją, np. `411+502 / 721, 722`,
 a nie osobno dla każdej linii — w kartach linii nadal widać ją przy każdej z nich.
+Brygada, która zmienia tylko zapis numeru z zerem na początku lub bez niego (`6` ↔ `06`,
+ta sama linia, data i typ dnia), nie jest pokazywana jako likwidacja i nowa brygada, tylko
+w osobnej liście **zmiany brygad**, np. `739/6 → 06 DP od 1.12: R-1` (albo
+`135/07 → 7 DP od 30.11: R-4 → R-3`, gdy zmienia się też zakład).
 
 Zakład bierzemy wprost z pola `depot_id` w `trips.txt` — obejmuje ono zarówno zajezdnie
 MZA, jak i przewoźników kontraktowych (Mobilis, PKS Grodzisk, Relobus, KMŁ) oraz zajezdnie

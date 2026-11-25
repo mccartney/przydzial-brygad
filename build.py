@@ -558,6 +558,35 @@ def short_date(iso):
     return f"{d.day}.{d.month:02d}"
 
 
+def split_renumberings(changes):
+    """Takes out a brigade that goes and one that comes in its place under the same number
+    spelled with a leading zero, "6" and "06" (same date, line and day group).
+
+    Returns the remaining changes and {(date, line, group, old, new): [("6", "06"), ...]},
+    old being the gone brigade's depot and new the new one's."""
+    def number(brigade):
+        return brigade.lstrip("0") or "0"
+    gone, came = {}, {}
+    for i, c in enumerate(changes):
+        if bool(c["old"]) != bool(c["new"]):
+            side = gone if c["old"] else came
+            side.setdefault((c["date"], c["line"], c["group"], number(c["brigade"])), []).append(i)
+    paired = set()
+    renumbered = {}
+    for key, olds in gone.items():
+        news = list(came.get(key, ()))
+        for i in olds:
+            j = next((j for j in news if changes[j]["brigade"] != changes[i]["brigade"]), None)
+            if j is None:
+                continue
+            news.remove(j)
+            paired.update((i, j))
+            a, b = changes[i], changes[j]
+            renumbered.setdefault((a["date"], a["line"], a["group"], a["old"], b["new"]), []).append(
+                (a["brigade"], b["brigade"]))
+    return [c for i, c in enumerate(changes) if i not in paired], renumbered
+
+
 def build_changes(payload):
     """The list under the cards, in two tabs over the same changes.
 
@@ -565,7 +594,9 @@ def build_changes(payload):
     kind of change, with all the brigades it hits; brigades shared by several lines get an
     item of their own, '411+502 / 721, 722'. By operator: a block per depot or
     operator, listing what it takes over ('116/01, 03 DP od 12.10: z R-1') and what it
-    gives up ('… do R-2'), so a change between two of them shows in both blocks."""
+    gives up ('… do R-2'), so a change between two of them shows in both blocks. A brigade
+    renumbered between '6' and '06' goes to a list of its own, 'zmiany brygad':
+    '739/6 → 06 DP od 1.12: R-1'."""
     changes = payload.get("changes")
     editions = payload.get("editions")
     if changes is None or not editions:
@@ -573,13 +604,19 @@ def build_changes(payload):
     full_name = payload["depots"]
     trams = set(payload.get("trams", ()))
     group_name = {k: t for k, t, _ in DAY_GROUPS}
+    changes, renumbered = split_renumberings(changes)
     # Changes come sorted by date, line, brigade, so each group's brigades come out sorted.
     grouped = {}
     for c in changes:
         grouped.setdefault((c["date"], c["line"], c["group"], c["old"], c["new"]), []).append(c["brigade"])
     group_order = [k for k, _t, _codes in DAY_GROUPS]
-    rows = sorted(grouped.items(), key=lambda kv: (
-        line_sort(kv[0][1]), kv[0][0], group_order.index(kv[0][2]), brigade_sort(kv[1][0]) + (kv[1][0],)))
+
+    def row_order(kv):
+        (date, line, group, _old, _new), brigades = kv
+        first = brigades[0][0] if isinstance(brigades[0], tuple) else brigades[0]
+        return line_sort(line), date, group_order.index(group), brigade_sort(first) + (first,)
+    rows = sorted(grouped.items(), key=row_order)
+    renum_rows = sorted(renumbered.items(), key=row_order)
 
     def item(ops, date, line, group, brigades, what):
         return (f'<li data-o="|{html.escape("|".join(ops))}|" data-m="{line_mode(line, trams)}">'
@@ -589,7 +626,8 @@ def build_changes(payload):
                 f'od {short_date(date)}: {what}</li>')
 
     by_line = []
-    # operator -> ([items it takes over], [items it gives up], brigades in, brigades out)
+    # operator -> [items it takes over, items it gives up, brigades in, brigades out,
+    #              items renumbering brigades it keeps, brigades renumbered]
     by_op = {}
     for (date, line, group, old, new), brigades in rows:
         old_badge = old and depot_badge(old, full_name)
@@ -606,24 +644,54 @@ def build_changes(payload):
         # A part on both sides (R-1 → R-1 / R-2) neither gains nor loses the brigade.
         for part in new_parts:
             if part not in old_parts:
-                gains = by_op.setdefault(part, [[], [], 0, 0])
+                gains = by_op.setdefault(part, [[], [], 0, 0, [], 0])
                 gains[0].append(item([part], date, line, group, brigades,
                                      f"z {old_badge}" if old else "nowa brygada"))
                 gains[2] += len(brigades)
         for part in old_parts:
             if part not in new_parts:
-                losses = by_op.setdefault(part, [[], [], 0, 0])
+                losses = by_op.setdefault(part, [[], [], 0, 0, [], 0])
                 losses[1].append(item([part], date, line, group, brigades,
                                       f"do {new_badge}" if new else "likwidacja"))
                 losses[3] += len(brigades)
 
+    # A brigade renumbered between "6" and "06": one item, "739/6 → 06", not a removal
+    # and a new brigade.
+    by_line_renum = []
+    for (date, line, group, old, new), pairs in renum_rows:
+        old_badge = depot_badge(old, full_name)
+        new_badge = depot_badge(new, full_name)
+        labels = [f"{a} → {b}" for a, b in pairs]
+        old_parts = old.split(" / ")
+        new_parts = new.split(" / ")
+        by_line_renum.append(item(old_parts + new_parts, date, line, group, labels,
+                                  new_badge if old == new else f"{old_badge} → {new_badge}"))
+        # Per operator, one that keeps the brigade sees the renumbering; one that takes it
+        # over or gives it up sees that.
+        for part in new_parts:
+            entry = by_op.setdefault(part, [[], [], 0, 0, [], 0])
+            if part in old_parts:
+                entry[4].append(item([part], date, line, group, labels, depot_badge(part, full_name)))
+                entry[5] += len(pairs)
+            else:
+                entry[0].append(item([part], date, line, group, labels, f"z {old_badge}"))
+                entry[2] += len(pairs)
+        for part in old_parts:
+            if part not in new_parts:
+                entry = by_op.setdefault(part, [[], [], 0, 0, [], 0])
+                entry[1].append(item([part], date, line, group, labels, f"do {new_badge}"))
+                entry[3] += len(pairs)
+
+    def change_list(title, items, n=None):
+        count = "" if n is None else f' <span class="cnt">{n}</span>'
+        heading = f"<h4>{title}{count}</h4>" if title else ""
+        return f'<div class="cl">{heading}<ul class="changes">{"".join(items)}</ul></div>' if items else ""
+
     blocks = []
     for op in sorted(by_op, key=depot_sort):
-        gains, losses, n_in, n_out = by_op[op]
-        lists = "".join(
-            f'<div class="cl"><h4>{title} <span class="cnt">{n}</span></h4>'
-            f'<ul class="changes">{"".join(items)}</ul></div>'
-            for title, items, n in (("przejmuje", gains, n_in), ("oddaje", losses, n_out)) if items)
+        gains, losses, n_in, n_out, renums, n_renum = by_op[op]
+        lists = (change_list("przejmuje", gains, n_in) + change_list("oddaje", losses, n_out)
+                 + change_list("zmiany brygad", renums, n_renum))
         blocks.append(
             f'<div class="cg" data-o="|{html.escape(op)}|" data-m="{depot_mode(op)}"><h3><span class="sw" '
             f'style="background:{DEPOT_COLOR.get(op, DEPOT_COLOR[UNKNOWN])}"></span>'
@@ -631,14 +699,14 @@ def build_changes(payload):
             f'{lists}</div>')
 
     span = f"{short_date(editions[0])}–{short_date(editions[-1])}"
-    if not by_line:
+    if not by_line and not by_line_renum:
         body = '<div class="sub">Brak zmian.</div>'
     else:
         body = f"""<div class="tabs" role="tablist" aria-label="Grupowanie zmian">
       <button type="button" role="tab" id="tab-line" aria-controls="ch-line" aria-selected="true">wg linii</button>
       <button type="button" role="tab" id="tab-op" aria-controls="ch-op" aria-selected="false" tabindex="-1">wg zakładu / przewoźnika</button>
     </div>
-    <div id="ch-line" role="tabpanel" aria-labelledby="tab-line"><ul class="changes">{"".join(by_line)}</ul></div>
+    <div id="ch-line" role="tabpanel" aria-labelledby="tab-line">{change_list("", by_line)}{change_list("zmiany brygad", by_line_renum, sum(len(p) for _k, p in renum_rows))}</div>
     <div id="ch-op" role="tabpanel" aria-labelledby="tab-op" hidden>{"".join(blocks)}</div>"""
     return f"""<section>
     <h2 class="sec">Zmiany przydziału</h2>
