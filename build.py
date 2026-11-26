@@ -576,6 +576,8 @@ def build_changes(payload):
     # Changes come sorted by date, line, brigade, so each group's brigades come out sorted.
     grouped = {}
     for c in changes:
+        if c["date"] != "2026-12-01":
+            continue        
         grouped.setdefault((c["date"], c["line"], c["group"], c["old"], c["new"]), []).append(c["brigade"])
     group_order = [k for k, _t, _codes in DAY_GROUPS]
     rows = sorted(grouped.items(), key=lambda kv: (
